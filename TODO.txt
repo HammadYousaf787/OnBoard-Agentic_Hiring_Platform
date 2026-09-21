@@ -202,6 +202,13 @@ RECOMMENDATIONS (non-blocking, worth considering)
 
 RECENTLY DONE
 --------------
+- Appointments page room-setup polish (2026-09-22): every row without a room
+  has its own "Set up room" button (next to notify/edit/delete), interviews
+  whose room already exists can no longer be selected or set up again (checkbox
+  disabled, "Select all" skips them; backend returns 409 for an already-set-up
+  room, so its candidate link stays valid), and the "N selected - Set up video
+  rooms / Clear" bar now sits directly above the Lined-up interviews card
+  instead of above the calendar.
 - Slot management + scheduling validation (2026-09-22): interview slots that
   haven't started can be removed (DELETE /appointments/{id}; button on the
   candidate's pipeline, the Appointments list and the interview record page).

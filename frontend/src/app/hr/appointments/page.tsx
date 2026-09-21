@@ -28,6 +28,7 @@ export default function AppointmentsPage() {
   const [removeTarget, setRemoveTarget] = useState<Appointment | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [settingUp, setSettingUp] = useState(false);
+  const [settingUpId, setSettingUpId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);
@@ -53,16 +54,29 @@ export default function AppointmentsPage() {
     });
   }
 
+  async function runSetup(ids: string[]) {
+    setToggleError(null);
+    const result = await setupInterviewRooms(ids);
+    if (!result.success) setToggleError(result.error ?? "Something went wrong.");
+    return result.success;
+  }
+
   async function handleSetupRooms() {
     setSettingUp(true);
-    setToggleError(null);
-    const result = await setupInterviewRooms([...selected]);
+    const ok = await runSetup(selectedIds);
     setSettingUp(false);
-    if (!result.success) {
-      setToggleError(result.error ?? "Something went wrong.");
-      return;
-    }
-    setSelected(new Set());
+    if (ok) setSelected(new Set());
+  }
+
+  async function handleSetupOne(id: string) {
+    setSettingUpId(id);
+    await runSetup([id]);
+    setSettingUpId(null);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   }
 
   async function copyApplicantLink(appt: Appointment) {
@@ -107,8 +121,10 @@ export default function AppointmentsPage() {
       ),
     [myAppointments]
   );
-  const selectableIds = allInterviews.filter((a) => a.roomStatus !== "ended").map((a) => a.id);
-  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+  // Only interviews whose room has not been set up can be selected for setup.
+  const selectableIds = allInterviews.filter((a) => a.roomStatus === "not_setup").map((a) => a.id);
+  const selectedIds = selectableIds.filter((id) => selected.has(id));
+  const allSelected = selectableIds.length > 0 && selectedIds.length === selectableIds.length;
 
   function roundLabel(appt: Appointment) {
     const rounds = myAppointments
@@ -133,9 +149,10 @@ export default function AppointmentsPage() {
         <input
           type="checkbox"
           aria-label={`Select interview with ${applicant?.name ?? "candidate"}`}
-          checked={selected.has(appt.id)}
+          checked={selected.has(appt.id) && appt.roomStatus === "not_setup"}
           onChange={() => toggleSelected(appt.id)}
-          disabled={appt.roomStatus === "ended"}
+          disabled={appt.roomStatus !== "not_setup"}
+          title={appt.roomStatus !== "not_setup" ? "Room already set up" : undefined}
           className="h-4 w-4 shrink-0 cursor-pointer accent-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
         />
         )}
@@ -182,6 +199,29 @@ export default function AppointmentsPage() {
             >
               <Video className="h-3.5 w-3.5" />
               {appt.roomStatus === "ended" ? "Interview record" : "Interviewer room"}
+            </Link>
+          )}
+          {appt.roomStatus === "not_setup" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleSetupOne(appt.id)}
+              loading={settingUpId === appt.id}
+              aria-label={`Set up video room for ${applicant?.name ?? "candidate"}`}
+              title="Set up the video room"
+            >
+              <Video className="h-3.5 w-3.5" />
+              Set up room
+            </Button>
+          )}
+          {!rooms && appt.roomStatus !== "not_setup" && appt.roomStatus !== "ended" && (
+            <Link
+              href={`/hr/appointments/${appt.id}/room`}
+              className="inline-flex items-center rounded-lg px-2 py-1.5 text-primary hover:bg-primary-soft"
+              title="Open the interviewer room"
+              aria-label={`Open interviewer room for ${applicant?.name ?? "candidate"}`}
+            >
+              <Video className="h-3.5 w-3.5" />
             </Link>
           )}
           <Button
@@ -241,23 +281,6 @@ export default function AppointmentsPage() {
         }
       />
 
-      {selected.size > 0 && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary-soft px-4 py-3">
-          <span className="text-sm text-primary">
-            {selected.size} interview{selected.size !== 1 ? "s" : ""} selected
-          </span>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleSetupRooms} loading={settingUp}>
-              <Video className="h-4 w-4" />
-              Set up video rooms
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-              Clear
-            </Button>
-          </div>
-        </div>
-      )}
-
       {toggleError && (
         <div className="mb-4 rounded-lg bg-danger-soft px-4 py-2.5 text-sm text-danger">
           {toggleError}
@@ -301,10 +324,27 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
+      {selectedIds.length > 0 && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary-soft px-4 py-3">
+          <span className="text-sm text-primary">
+            {selectedIds.length} interview{selectedIds.length !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleSetupRooms} loading={settingUp}>
+              <Video className="h-4 w-4" />
+              Set up video rooms
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Card className="mt-6">
         <CardHeader
           title={`Lined-up interviews (${allInterviews.length})`}
-          subtitle="Select interviews to set up their video rooms, then share each candidate's link"
+          subtitle="Select interviews (or use each row's Set up room) to create their video rooms, then share each candidate's link"
           action={
             selectableIds.length > 0 && (
               <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">

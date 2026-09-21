@@ -92,6 +92,13 @@ async def setup_rooms(
     appointments = list(result.scalars().all())
     if not appointments:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No matching appointments.")
+    # A room that already exists is never set up again (its candidate link stays valid).
+    appointments = [a for a in appointments if a.room_status == "not_setup"]
+    if not appointments:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The room for that interview is already set up.",
+        )
     for appointment in appointments:
         _ensure_room_token(appointment)
     await db.commit()
