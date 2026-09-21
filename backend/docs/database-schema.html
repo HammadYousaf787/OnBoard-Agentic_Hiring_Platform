@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Onboarding Platform — Database & Backend Architecture</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #14161f;
+    --muted: #5b6272;
+    --border: #e2e5eb;
+    --primary: #4f46e5;
+    --primary-soft: #eef2ff;
+    --surface: #f8f9fc;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 48px 56px 72px;
+  }
+  .cover {
+    padding: 64px 0 40px;
+    border-bottom: 3px solid var(--primary);
+    margin-bottom: 32px;
+  }
+  .cover .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary);
+    background: var(--primary-soft);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  .cover h1 {
+    font-size: 32px;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  .cover p.sub {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 0;
+    max-width: 640px;
+  }
+  .cover .meta {
+    margin-top: 28px;
+    display: flex;
+    gap: 32px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .cover .meta strong { color: var(--fg); display: block; font-size: 13px; }
+
+  h2 {
+    font-size: 19px;
+    margin: 44px 0 6px;
+    padding-top: 4px;
+    letter-spacing: -0.005em;
+  }
+  h2 .num {
+    color: var(--primary);
+    margin-right: 8px;
+  }
+  h3 {
+    font-size: 14.5px;
+    margin: 24px 0 8px;
+    font-family: var(--mono);
+  }
+  p.lead {
+    color: var(--muted);
+    margin: 0 0 20px;
+    max-width: 760px;
+  }
+
+  .diagram-wrap {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    background: var(--surface);
+    margin: 16px 0 28px;
+    page-break-inside: avoid;
+  }
+  .diagram-wrap .mermaid { display: flex; justify-content: center; }
+
+  table.cols {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  table.cols th {
+    text-align: left;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 7px 10px;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  table.cols td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.cols td.col-name { font-family: var(--mono); white-space: nowrap; }
+  table.cols td.col-type { font-family: var(--mono); color: var(--muted); white-space: nowrap; }
+  table.cols tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-right: 4px;
+    letter-spacing: 0.02em;
+  }
+  .badge.pk { background: #fef3c7; color: #92400e; }
+  .badge.fk { background: #dbeafe; color: #1e40af; }
+  .badge.uniq { background: #ede9fe; color: #5b21b6; }
+  .badge.null { background: #f3f4f6; color: #6b7280; }
+
+  .note {
+    background: var(--primary-soft);
+    border-left: 3px solid var(--primary);
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    color: #3730a3;
+    margin: 12px 0 20px;
+  }
+
+  .table-block { page-break-inside: avoid; margin-bottom: 6px; }
+
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 16px 0 24px;
+  }
+  .flow-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    background: var(--surface);
+  }
+  .flow-card h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+  }
+  .flow-card ol {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: var(--fg);
+  }
+  .flow-card ol li { margin-bottom: 5px; }
+  .flow-card code {
+    font-family: var(--mono);
+    background: #fff;
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  .endpoints {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    margin: 10px 0 26px;
+  }
+  .endpoints th {
+    text-align: left;
+    background: var(--surface);
+    padding: 6px 9px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .endpoints td {
+    padding: 5px 9px;
+    border-bottom: 1px solid #f0f1f4;
+  }
+  .endpoints td.method { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+  .method.get { color: #0369a1; }
+  .method.post { color: #15803d; }
+  .method.patch { color: #b45309; }
+  .method.delete { color: #b91c1c; }
+  .endpoints td.path { font-family: var(--mono); white-space: nowrap; }
+  .endpoints td.who { color: var(--muted); white-space: nowrap; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media print {
+    .page { padding: 0 8mm; }
+    .cover { padding-top: 10mm; }
+    h2 { page-break-after: avoid; }
+    .table-block { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="cover">
+    <span class="tag">Backend Architecture Reference</span>
+    <h1>Employee Onboarding Platform</h1>
+    <p class="sub">
+      Database schema, entity relationships, authentication design, and object
+      storage layout for the FastAPI backend powering the admin/HR onboarding
+      and recruitment platform.
+    </p>
+    <div class="meta">
+      <div><strong>Database</strong>PostgreSQL 18 (onboardingplatformdb)</div>
+      <div><strong>Object storage</strong>MinIO (S3-compatible)</div>
+      <div><strong>API framework</strong>FastAPI + SQLAlchemy 2.0 (async)</div>
+      <div><strong>Auth</strong>JWT (access + refresh), bcrypt password hashing</div>
+    </div>
+  </div>
+
+  <h2><span class="num">1.</span>Entity-relationship diagram</h2>
+  <p class="lead">
+    Six tables cover accounts &amp; approvals, job postings, applicants and
+    their AI-ranking scores, interview appointments, and the CV bank. All
+    primary keys are UUIDs generated application-side.
+  </p>
+
+  <div class="diagram-wrap">
+    <pre class="mermaid">
+erDiagram
+    USERS ||--o{ APPROVAL_EVENTS : "has history"
+    USERS ||--o{ JOBS : "assigned_hr (optional)"
+    USERS ||--o{ JOBS : "created_by"
+    USERS ||--o{ APPOINTMENTS : "hr_id"
+    USERS ||--o{ CV_BANK_ENTRIES : "rejected_by (optional)"
+    JOBS ||--o{ APPLICANTS : "has"
+    JOBS ||--o{ APPOINTMENTS : "for"
+    JOBS ||--o{ CV_BANK_ENTRIES : "source_job (optional)"
+    APPLICANTS ||--o{ APPOINTMENTS : "has"
+    APPLICANTS |o--o| CV_BANK_ENTRIES : "saved as (optional)"
+
+    USERS {
+        uuid id PK
+        string username UK
+        string full_name
+        string email UK
+        string phone_number
+        string country
+        string city
+        string password_hash
+        enum role
+        enum status
+        string title
+        string department
+        bool auto_save_cv_bank_on_reject
+        bool is_demo
+        datetime created_at
+        datetime updated_at
+    }
+
+    APPROVAL_EVENTS {
+        uuid id PK
+        uuid user_id FK
+        enum action
+        uuid by_user_id FK
+        string by_user_name
+        text note
+        datetime created_at
+    }
+
+    JOBS {
+        uuid id PK
+        string title
+        string department
+        string location
+        text description
+        int seats
+        int filled_seats
+        int salary_min
+        int salary_max
+        string currency
+        enum status
+        uuid assigned_hr_id FK
+        uuid created_by_id FK
+        bool is_demo
+        datetime created_at
+        datetime updated_at
+    }
+
+    APPLICANTS {
+        uuid id PK
+        uuid job_id FK
+        string name
+        string email
+        string phone_number
+        string country
+        string city
+        string linkedin_url "nullable"
+        string github_url "nullable"
+        int experience_years
+        string cv_object_key
+        string cv_file_name
+        text cv_summary
+        text cover_letter
+        datetime applied_date
+        enum stage
+        text rejection_note
+        bool saved_to_cv_bank
+        float communication_score "nullable"
+        float jd_overlap_score "nullable"
+        float linkedin_score "nullable"
+        float github_score "nullable"
+        float overall_score "nullable"
+        datetime ranked_at "nullable"
+        bool is_demo
+        datetime created_at
+        datetime updated_at
+    }
+
+    APPOINTMENTS {
+        uuid id PK
+        uuid applicant_id FK
+        uuid job_id FK
+        uuid hr_id FK
+        datetime scheduled_at
+        bool notify_day_before
+        datetime created_at
+        datetime updated_at
+    }
+
+    CV_BANK_ENTRIES {
+        uuid id PK
+        uuid applicant_id FK "nullable, SET NULL"
+        string name
+        string email
+        string phone_number
+        string country
+        string city
+        string cv_object_key
+        string cv_file_name
+        text cv_summary
+        int experience_years
+        string linkedin_url "nullable"
+        string github_url "nullable"
+        uuid source_job_id FK "nullable, SET NULL"
+        string source_job_title
+        uuid rejected_by_id FK "nullable, SET NULL"
+        string rejected_by_name
+        datetime rejected_at
+        text note
+        bool is_demo
+    }
+    </pre>
+  </div>
+
+  <div class="note">
+    <strong>Design note — AI scores live on the applicant row.</strong>
+    The four score fields plus <code>overall_score</code> are a strict 1:1
+    relationship with the applicant and are always read together with it, so
+    they're embedded directly on <code>applicants</code> rather than a
+    separate joined table. They stay <code>NULL</code> until "Run AI ranking"
+    executes for the parent job.
+  </div>
+
+  <div class="note">
+    <strong>Design note — CV bank entries are snapshots, not references.</strong>
+    When a candidate is rejected and saved to the CV bank, their info is
+    <em>copied</em> into <code>cv_bank_entries</code> rather than only linked.
+    This keeps the talent-pool entry meaningful even if the original
+    applicant or job is later deleted — the foreign keys
+    (<code>applicant_id</code>, <code>source_job_id</code>,
+    <code>rejected_by_id</code>) are kept as best-effort links
+    (<code>ON DELETE SET NULL</code>) but the descriptive columns are the
+    source of truth for display.
+  </div>
+
+  <h2><span class="num">2.</span>Table reference</h2>
+
+  <div class="table-block">
+    <h3>users</h3>
+    <p class="lead">Both admin and HR accounts live in one table, distinguished by <code>role</code>. New accounts (self-signup) start in <code>pending</code> status and cannot authenticate until an admin approves them; admins can also create HR accounts directly (auto-approved).</p>
+    <table class="cols">
+      <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+      <tr><td class="col-name">id</td><td class="col-type">uuid</td><td><span class="badge pk">PK</span></td></tr>
+      <tr><td class="col-name">username</td><td class="col-type">varchar(50)</td><td><span class="badge uniq">unique</span> login identifier, alternative to email</td></tr>
+      <tr><td class="col-name">full_name</td><td class="col-type">varchar(150)</td><td></td></tr>
+      <tr><td class="col-name">email</td><td class="col-type">varchar(255)</td><td><span class="badge uniq">unique</span></td></tr>
+      <tr><td class="col-name">phone_number</td><td class="col-type">varchar(30)</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">country</td><td class="col-type">varchar(100)</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">city</td><td class="col-type">varchar(100)</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">password_hash</td><td class="col-type">varchar(255)</td><td>bcrypt hash — see §3</td></tr>
+      <tr><td class="col-name">role</td><td class="col-type">enum</td><td><code>admin</code> · <code>hr</code></td></tr>
+      <tr><td class="col-name">status</td><td class="col-type">enum</td><td><code>pending</code> · <code>approved</code> · <code>rejected</code> · <code>removed</code></td></tr>
+      <tr><td class="col-name">title</td><td class="col-type">varchar(150)</td><td><span class="badge null">nullable</span> job title, e.g. "HR Business Partner"</td></tr>
+      <tr><td class="col-name">department</td><td class="col-type">varchar(150)</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">auto_save_cv_bank_on_reject</td><td class="col-type">bool</td><td>HR preference; default false</td></tr>
+      <tr><td class="col-name">is_demo</td><td class="col-type">bool</td><td>flags seed/demo accounts</td></tr>
+      <tr><td class="col-name">created_at / updated_at</td><td class="col-type">timestamptz</td><td>server-managed</td></tr>
+    </table>
+  </div>
+
+  <div class="table-block">
+    <h3>approval_events</h3>
+    <p class="lead">Append-only audit trail: every approve/reject/remove/reinstate action on a user account, and who performed it. This is what powers the "HR approval history" view.</p>
+    <table class="cols">
+      <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+      <tr><td class="col-name">id</td><td class="col-type">uuid</td><td><span class="badge pk">PK</span></td></tr>
+      <tr><td class="col-name">user_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → users.id</span> ON DELETE CASCADE</td></tr>
+      <tr><td class="col-name">action</td><td class="col-type">enum</td><td><code>approved</code> · <code>rejected</code> · <code>removed</code> · <code>reinstated</code></td></tr>
+      <tr><td class="col-name">by_user_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → users.id</span> <span class="badge null">nullable</span> — null for the system-seeded initial admin</td></tr>
+      <tr><td class="col-name">by_user_name</td><td class="col-type">varchar(150)</td><td>snapshot of the actor's name, survives actor deletion</td></tr>
+      <tr><td class="col-name">note</td><td class="col-type">text</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">created_at</td><td class="col-type">timestamptz</td><td></td></tr>
+    </table>
+  </div>
+
+  <div class="table-block">
+    <h3>jobs</h3>
+    <p class="lead">A job posting. <code>filled_seats</code> increments as candidates are accepted and the job auto-closes once full. <code>assigned_hr_id</code> is the single HR who owns recruitment for the role.</p>
+    <table class="cols">
+      <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+      <tr><td class="col-name">id</td><td class="col-type">uuid</td><td><span class="badge pk">PK</span></td></tr>
+      <tr><td class="col-name">title / department / location</td><td class="col-type">varchar</td><td></td></tr>
+      <tr><td class="col-name">description</td><td class="col-type">text</td><td></td></tr>
+      <tr><td class="col-name">seats / filled_seats</td><td class="col-type">int</td><td>capacity vs. hired count</td></tr>
+      <tr><td class="col-name">salary_min / salary_max</td><td class="col-type">int</td><td></td></tr>
+      <tr><td class="col-name">currency</td><td class="col-type">varchar(10)</td><td>default "PKR"</td></tr>
+      <tr><td class="col-name">status</td><td class="col-type">enum</td><td><code>open</code> · <code>closed</code></td></tr>
+      <tr><td class="col-name">assigned_hr_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → users.id</span> <span class="badge null">nullable</span> ON DELETE SET NULL</td></tr>
+      <tr><td class="col-name">created_by_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → users.id</span> ON DELETE RESTRICT (an admin)</td></tr>
+      <tr><td class="col-name">is_demo</td><td class="col-type">bool</td><td></td></tr>
+      <tr><td class="col-name">created_at / updated_at</td><td class="col-type">timestamptz</td><td></td></tr>
+    </table>
+  </div>
+
+  <div class="table-block">
+    <h3>applicants</h3>
+    <p class="lead">A candidate who applied to a job. The CV file itself lives in MinIO — this row only stores the object key and display filename (see §4). <code>stage</code> drives the recruitment pipeline shown on the HR dashboard.</p>
+    <table class="cols">
+      <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+      <tr><td class="col-name">id</td><td class="col-type">uuid</td><td><span class="badge pk">PK</span></td></tr>
+      <tr><td class="col-name">job_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → jobs.id</span> ON DELETE CASCADE</td></tr>
+      <tr><td class="col-name">name / email / phone_number</td><td class="col-type">varchar</td><td></td></tr>
+      <tr><td class="col-name">country / city</td><td class="col-type">varchar(100)</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">linkedin_url</td><td class="col-type">varchar(500)</td><td><span class="badge null">nullable</span> — not every candidate has one</td></tr>
+      <tr><td class="col-name">github_url</td><td class="col-type">varchar(500)</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">experience_years</td><td class="col-type">int</td><td></td></tr>
+      <tr><td class="col-name">cv_object_key</td><td class="col-type">varchar(500)</td><td><span class="badge null">nullable</span> — MinIO object key</td></tr>
+      <tr><td class="col-name">cv_file_name</td><td class="col-type">varchar(255)</td><td><span class="badge null">nullable</span> — original filename for display</td></tr>
+      <tr><td class="col-name">cv_summary</td><td class="col-type">text</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">cover_letter</td><td class="col-type">text</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">applied_date</td><td class="col-type">timestamptz</td><td></td></tr>
+      <tr><td class="col-name">stage</td><td class="col-type">enum</td><td><code>applied</code> → <code>assessment_passed</code> → <code>interview_scheduled</code> → <code>accepted</code>/<code>rejected</code></td></tr>
+      <tr><td class="col-name">rejection_note</td><td class="col-type">text</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">saved_to_cv_bank</td><td class="col-type">bool</td><td></td></tr>
+      <tr><td class="col-name">communication_score, jd_overlap_score, linkedin_score, github_score, overall_score</td><td class="col-type">float</td><td><span class="badge null">nullable</span> — 1–5, populated by mock AI ranking</td></tr>
+      <tr><td class="col-name">ranked_at</td><td class="col-type">timestamptz</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">is_demo</td><td class="col-type">bool</td><td></td></tr>
+      <tr><td class="col-name">created_at / updated_at</td><td class="col-type">timestamptz</td><td></td></tr>
+    </table>
+  </div>
+
+  <div class="table-block">
+    <h3>appointments</h3>
+    <p class="lead">One scheduled interview slot for an applicant. <code>hr_id</code> is the HR who scheduled it (always the job's assigned HR in practice, enforced at the API layer).</p>
+    <table class="cols">
+      <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+      <tr><td class="col-name">id</td><td class="col-type">uuid</td><td><span class="badge pk">PK</span></td></tr>
+      <tr><td class="col-name">applicant_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → applicants.id</span> ON DELETE CASCADE</td></tr>
+      <tr><td class="col-name">job_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → jobs.id</span> ON DELETE CASCADE</td></tr>
+      <tr><td class="col-name">hr_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → users.id</span> ON DELETE CASCADE</td></tr>
+      <tr><td class="col-name">scheduled_at</td><td class="col-type">timestamptz</td><td></td></tr>
+      <tr><td class="col-name">notify_day_before</td><td class="col-type">bool</td><td>reminder preference — no real notification is sent yet</td></tr>
+      <tr><td class="col-name">created_at / updated_at</td><td class="col-type">timestamptz</td><td></td></tr>
+    </table>
+  </div>
+
+  <div class="table-block">
+    <h3>cv_bank_entries</h3>
+    <p class="lead">Snapshot of a rejected candidate's info, kept for future openings. Created automatically when an HR rejects an applicant with "save to CV bank" checked (or when their auto-save setting is on).</p>
+    <table class="cols">
+      <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+      <tr><td class="col-name">id</td><td class="col-type">uuid</td><td><span class="badge pk">PK</span></td></tr>
+      <tr><td class="col-name">applicant_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → applicants.id</span> <span class="badge null">nullable</span> ON DELETE SET NULL</td></tr>
+      <tr><td class="col-name">name, email, phone_number, country, city</td><td class="col-type">varchar</td><td>copied from the applicant at rejection time</td></tr>
+      <tr><td class="col-name">cv_object_key / cv_file_name</td><td class="col-type">varchar</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">cv_summary</td><td class="col-type">text</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">experience_years</td><td class="col-type">int</td><td></td></tr>
+      <tr><td class="col-name">linkedin_url / github_url</td><td class="col-type">varchar(500)</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">source_job_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → jobs.id</span> <span class="badge null">nullable</span> ON DELETE SET NULL</td></tr>
+      <tr><td class="col-name">source_job_title</td><td class="col-type">varchar(200)</td><td>snapshot, survives job deletion</td></tr>
+      <tr><td class="col-name">rejected_by_id</td><td class="col-type">uuid</td><td><span class="badge fk">FK → users.id</span> <span class="badge null">nullable</span> ON DELETE SET NULL</td></tr>
+      <tr><td class="col-name">rejected_by_name</td><td class="col-type">varchar(150)</td><td>snapshot</td></tr>
+      <tr><td class="col-name">rejected_at</td><td class="col-type">timestamptz</td><td></td></tr>
+      <tr><td class="col-name">note</td><td class="col-type">text</td><td><span class="badge null">nullable</span></td></tr>
+      <tr><td class="col-name">is_demo</td><td class="col-type">bool</td><td></td></tr>
+    </table>
+  </div>
+
+  <h2><span class="num">3.</span>Authentication</h2>
+  <p class="lead">Stateless JWT auth with an access/refresh pair, bcrypt-hashed passwords, and an admin approval gate before any new account can log in.</p>
+
+  <div class="grid2">
+    <div class="flow-card">
+      <h4>Signup → approval → login</h4>
+      <ol>
+        <li><code>POST /auth/signup</code> creates a user with <code>status = pending</code>.</li>
+        <li>An admin calls <code>POST /users/{id}/approve</code> (or <code>/reject</code>), which also writes an <code>approval_events</code> row.</li>
+        <li><code>POST /auth/login</code> checks the password, then the account status — pending/rejected/removed accounts are refused with a specific reason.</li>
+        <li>On success, the server issues a signed access token (30 min) and refresh token (7 days).</li>
+      </ol>
+    </div>
+    <div class="flow-card">
+      <h4>Token design</h4>
+      <ol>
+        <li>JWT, <code>HS256</code>, signed with a server-side secret (<code>JWT_SECRET_KEY</code>).</li>
+        <li>Payload: <code>sub</code> (user id), <code>role</code>, <code>type</code> (<code>access</code>/<code>refresh</code>), <code>iat</code>, <code>exp</code>.</li>
+        <li>Every protected route resolves the user via <code>Authorization: Bearer &lt;token&gt;</code> and re-checks <code>status == approved</code> on each request.</li>
+        <li><code>POST /auth/refresh</code> exchanges a valid refresh token for a new pair (rotation). Tokens are stateless — there's no server-side revocation list yet.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Passwords are hashed, not encrypted.</strong> <code>bcrypt</code> with a per-password random salt is a one-way hash — the plaintext password is never recoverable, even by the platform operators. This is the correct approach for credentials (as opposed to reversible encryption, which would be appropriate for data you need to read back later, like a CV file).
+  </div>
+
+  <h2><span class="num">4.</span>Object storage (MinIO)</h2>
+  <p class="lead">CV files never touch the Postgres database — they're uploaded straight to a MinIO bucket, and the applicant/CV-bank row only keeps the object key.</p>
+
+  <div class="grid2">
+    <div class="flow-card">
+      <h4>Upload path</h4>
+      <ol>
+        <li>HR/admin submits a candidate with a CV file (multipart form).</li>
+        <li>Backend generates a unique key: <code>cvs/&lt;uuid&gt;-&lt;sanitized filename&gt;</code>.</li>
+        <li>File bytes are streamed to the <code>candidate-cvs</code> bucket via the MinIO SDK.</li>
+        <li>Only the object key + original filename are saved on the <code>applicants</code> row.</li>
+      </ol>
+    </div>
+    <div class="flow-card">
+      <h4>Download path</h4>
+      <ol>
+        <li>Client requests <code>GET /applicants/{id}/cv-url</code>.</li>
+        <li>Backend checks the caller has access to that applicant's job.</li>
+        <li>A presigned MinIO URL is generated, valid for 15 minutes.</li>
+        <li>Client downloads directly from MinIO — the file never passes through the API server.</li>
+      </ol>
+    </div>
+  </div>
+
+  <h2><span class="num">5.</span>API surface (v0.1)</h2>
+  <p class="lead">31 endpoints across five routers. "Who" reflects the enforced role — HR endpoints are additionally scoped to jobs/applicants/appointments the caller owns.</p>
+
+  <table class="endpoints">
+    <tr><th>Method</th><th>Path</th><th>Who</th><th>Purpose</th></tr>
+    <tr><td class="method post">POST</td><td class="path">/auth/signup</td><td class="who">public</td><td>Request an account (starts pending)</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/auth/login</td><td class="who">public</td><td>Exchange credentials for a token pair</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/auth/refresh</td><td class="who">public (valid refresh token)</td><td>Rotate access/refresh tokens</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/auth/me</td><td class="who">any approved user</td><td>Current profile + approval history</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/users</td><td class="who">admin</td><td>List accounts (filter by role/status)</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/users/{id}</td><td class="who">admin</td><td>Account detail + approval history</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/users/hr</td><td class="who">admin</td><td>Create an HR account directly (auto-approved)</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/users/{id}/approve</td><td class="who">admin</td><td>Approve a pending signup</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/users/{id}/reject</td><td class="who">admin</td><td>Reject a pending signup</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/users/{id}/remove</td><td class="who">admin</td><td>Remove an HR account (unassigns their jobs)</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/users/{id}/reinstate</td><td class="who">admin</td><td>Reinstate a removed account</td></tr>
+    <tr><td class="method patch">PATCH</td><td class="path">/users/me/settings</td><td class="who">hr</td><td>Toggle auto-save-to-CV-bank preference</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/jobs</td><td class="who">admin (all) / hr (assigned)</td><td>List jobs</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/jobs</td><td class="who">admin</td><td>Create a job posting</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/jobs/{id}</td><td class="who">admin / assigned hr</td><td>Job detail</td></tr>
+    <tr><td class="method patch">PATCH</td><td class="path">/jobs/{id}</td><td class="who">admin / assigned hr</td><td>Edit job details</td></tr>
+    <tr><td class="method delete">DELETE</td><td class="path">/jobs/{id}</td><td class="who">admin / assigned hr</td><td>Delete a job + its applicants</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/jobs/{id}/assign-hr</td><td class="who">admin</td><td>Assign/unassign the owning HR</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/jobs/{id}/run-ai-ranking</td><td class="who">admin / assigned hr</td><td>Run mock AI scoring for all applicants</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/jobs/{id}/applicants</td><td class="who">admin / assigned hr</td><td>List applicants for a job</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/jobs/{id}/applicants</td><td class="who">admin / assigned hr</td><td>Add an applicant (+ CV upload)</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/applicants/{id}</td><td class="who">admin / assigned hr</td><td>Applicant detail</td></tr>
+    <tr><td class="method patch">PATCH</td><td class="path">/applicants/{id}</td><td class="who">admin / assigned hr</td><td>Edit applicant info</td></tr>
+    <tr><td class="method delete">DELETE</td><td class="path">/applicants/{id}</td><td class="who">admin / assigned hr</td><td>Delete an applicant (+ CV file)</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/applicants/{id}/cv-url</td><td class="who">admin / assigned hr</td><td>Presigned CV download URL</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/applicants/{id}/mark-assessment-passed</td><td class="who">hr</td><td>Advance stage: applied → assessment_passed</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/applicants/{id}/schedule-interview</td><td class="who">hr</td><td>Create appointment; stage → interview_scheduled</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/applicants/{id}/accept</td><td class="who">hr</td><td>Stage → accepted; fills a job seat</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/applicants/{id}/reject</td><td class="who">hr</td><td>Stage → rejected; optionally saves to CV bank</td></tr>
+    <tr><td class="method post">POST</td><td class="path">/applicants/{id}/save-to-cv-bank</td><td class="who">hr</td><td>Save an already-rejected applicant retroactively</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/appointments</td><td class="who">admin (all) / hr (own)</td><td>List interview appointments</td></tr>
+    <tr><td class="method patch">PATCH</td><td class="path">/appointments/{id}/reschedule</td><td class="who">hr (owner)</td><td>Change the scheduled time</td></tr>
+    <tr><td class="method patch">PATCH</td><td class="path">/appointments/{id}/toggle-notify</td><td class="who">hr (owner)</td><td>Toggle the "notify 1 day prior" flag</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/cv-bank</td><td class="who">admin / hr</td><td>Browse the shared CV bank</td></tr>
+    <tr><td class="method get">GET</td><td class="path">/cv-bank/{id}/cv-url</td><td class="who">admin / hr</td><td>Presigned CV download URL</td></tr>
+    <tr><td class="method delete">DELETE</td><td class="path">/cv-bank/{id}</td><td class="who">admin / hr</td><td>Remove a CV bank entry</td></tr>
+  </table>
+
+  <h2><span class="num">6.</span>What's intentionally out of scope (v0.1)</h2>
+  <div class="flow-card" style="margin-bottom:24px;">
+    <ol>
+      <li>Not wired to the Next.js frontend yet — the frontend still runs on its own local mock/localStorage data. This backend is a standalone, independently testable API.</li>
+      <li>No refresh-token revocation/blacklist — logout is client-side only (discard the tokens). A token-blacklist table is the natural next step if that's needed.</li>
+      <li>No public/unauthenticated "apply to this job" endpoint yet — applicants are currently created by an authenticated admin/HR. A public careers-page flow can be added as its own (rate-limited) endpoint later.</li>
+      <li>AI ranking is a deterministic mock (hash-based), matching the frontend's simulated scoring — no model is called.</li>
+      <li>Real "notify me a day prior" delivery (email/push) is not implemented — the flag is stored but nothing sends a reminder yet.</li>
+    </ol>
+  </div>
+
+  <footer>
+    <span>Employee Onboarding Platform — Backend Architecture Reference</span>
+    <span>Generated 2026-09-15</span>
+  </footer>
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", er: { useMaxWidth: true } });
+</script>
+</body>
+</html>

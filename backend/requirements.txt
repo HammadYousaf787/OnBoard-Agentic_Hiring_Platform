@@ -1,0 +1,30 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Database
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+psycopg2-binary==2.9.10
+alembic==1.14.0
+
+# Settings / validation
+pydantic==2.13.5
+pydantic-settings==2.7.0
+email-validator==2.2.0
+
+# Auth
+bcrypt==4.2.1
+pyjwt==2.10.1
+
+# Object storage
+minio==7.2.13
+
+# AI review pipeline
+google-genai==2.24.0
+PyGithub==2.10.0
+brightdata-sdk==2.5.2
+pypdf==6.19.0
+
+# Video interviews
+agora-token-builder==1.0.0
