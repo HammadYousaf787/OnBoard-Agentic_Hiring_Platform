@@ -71,6 +71,9 @@ class Applicant(Base):
     hr_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     hr_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # When the final hiring decision (accepted / rejected) was made.
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

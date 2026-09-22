@@ -18,7 +18,7 @@ function formatTokens(n: number): string {
  * still shows up next time this admin's data reloads (login/navigation),
  * since there's no push/websocket channel between sessions.
  */
-export function AiUsageMeter() {
+export function AiUsageMeter({ compact = false }: { compact?: boolean }) {
   const { aiUsage } = useAppData();
   const [open, setOpen] = useState(false);
 
@@ -28,18 +28,24 @@ export function AiUsageMeter() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="mb-2 flex w-full items-center gap-2.5 rounded-lg border border-border bg-primary-soft/40 px-3 py-2.5 text-left transition-colors hover:bg-primary-soft cursor-pointer"
+        title={compact ? `AI usage: ${aiUsage.totalCalls} calls` : undefined}
+        aria-label="AI usage"
+        className={`mb-2 flex w-full items-center gap-2.5 rounded-lg border border-border bg-primary-soft/40 py-2.5 text-left transition-colors hover:bg-primary-soft cursor-pointer ${
+          compact ? "justify-center px-0" : "px-3"
+        }`}
       >
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
           <Sparkles className="h-4 w-4" />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-xs font-medium text-foreground">AI usage</span>
-          <span className="block truncate text-[11px] text-muted">
-            {aiUsage.totalCalls} call{aiUsage.totalCalls !== 1 ? "s" : ""} ·{" "}
-            {formatTokens(aiUsage.totalTokens)} tokens
+        {!compact && (
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-medium text-foreground">AI usage</span>
+            <span className="block truncate text-[11px] text-muted">
+              {aiUsage.totalCalls} call{aiUsage.totalCalls !== 1 ? "s" : ""} ·{" "}
+              {formatTokens(aiUsage.totalTokens)} tokens
+            </span>
           </span>
-        </span>
+        )}
       </button>
 
       <Modal

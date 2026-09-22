@@ -40,9 +40,14 @@
   border-color: var(--border);
 }
 
-html,
-body {
+html {
   height: 100%;
+}
+
+/* min-height (not height) so the page grows with its content; a fixed body height
+   would cap the sticky sidebar's containing block at one viewport. */
+body {
+  min-height: 100%;
 }
 
 body {

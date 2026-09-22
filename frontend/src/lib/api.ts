@@ -215,6 +215,7 @@ interface BackendApplicant {
   manual_rank: number | null;
   hr_score: number | null;
   hr_notes: string | null;
+  decided_at: string | null;
   is_demo: boolean;
 }
 
@@ -407,6 +408,7 @@ function mapApplicant(a: BackendApplicant): Applicant {
     manualRank: a.manual_rank ?? undefined,
     hrScore: a.hr_score ?? undefined,
     hrNotes: a.hr_notes ?? undefined,
+    decidedAt: a.decided_at ?? undefined,
     stage: a.stage,
     rejectionNote: a.rejection_note ?? undefined,
     savedToCvBank: a.saved_to_cv_bank,

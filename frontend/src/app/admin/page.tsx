@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Briefcase,
   FileText,
+  Gavel,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { PageHeader } from "@/components/layout/AdminShell";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { StarRating } from "@/components/ui/StarRating";
 
 export default function AdminDashboardPage() {
   const { currentUser, users, jobs, applicants } = useAppData();
@@ -51,6 +53,11 @@ export default function AdminDashboardPage() {
       href: "/admin/approvals",
     },
   ];
+
+  const recentDecisions = applicants
+    .filter((a) => (a.stage === "accepted" || a.stage === "rejected") && a.decidedAt)
+    .sort((a, b) => new Date(b.decidedAt!).getTime() - new Date(a.decidedAt!).getTime())
+    .slice(0, 6);
 
   const recentEvents = users
     .flatMap((u) =>
@@ -107,6 +114,60 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-3">
+          <CardHeader
+            title="Recent hiring decisions"
+            subtitle="Candidates accepted or rejected after interviews"
+          />
+          <CardBody className="p-0">
+            {recentDecisions.length === 0 ? (
+              <EmptyState
+                icon={Gavel}
+                title="No hiring decisions yet"
+                description="Accepted and rejected candidates will show up here."
+              />
+            ) : (
+              <ul className="divide-y divide-border">
+                {recentDecisions.map((a) => {
+                  const job = jobs.find((j) => j.id === a.jobId);
+                  const hr = users.find((u) => u.id === job?.assignedHrId);
+                  const accepted = a.stage === "accepted";
+                  return (
+                    <li
+                      key={a.id}
+                      className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5"
+                    >
+                      <div className="min-w-0">
+                        <Link
+                          href={`/admin/jobs/${a.jobId}/applicants/${a.id}`}
+                          className="text-sm font-medium text-foreground hover:text-primary"
+                        >
+                          {a.name}
+                        </Link>
+                        <p className="text-xs text-muted">
+                          {job?.title ?? "Unknown job"}
+                          {hr ? ` · decided by ${hr.name}` : ""} ·{" "}
+                          {new Date(a.decidedAt!).toLocaleDateString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        {a.hrScore !== undefined && <StarRating value={a.hrScore} size="sm" />}
+                        <Badge tone={accepted ? "green" : "red"} dot>
+                          {accepted ? "Accepted" : "Rejected"}
+                        </Badge>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+
         <Card className="lg:col-span-2">
           <CardHeader
             title="Recent account activity"

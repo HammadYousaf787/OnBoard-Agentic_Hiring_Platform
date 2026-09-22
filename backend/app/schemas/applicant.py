@@ -53,6 +53,7 @@ class ApplicantRead(BaseModel):
     manual_rank: int | None = None
     hr_score: float | None = None
     hr_notes: str | None = None
+    decided_at: datetime | None = None
 
     is_demo: bool
     created_at: datetime

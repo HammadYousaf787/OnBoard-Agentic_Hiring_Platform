@@ -387,6 +387,7 @@ async def accept_applicant(
         )
 
     applicant.stage = ApplicantStage.accepted
+    applicant.decided_at = datetime.now(timezone.utc)
     job.filled_seats += 1
     if job.filled_seats >= job.seats:
         job.status = JobStatus.closed
@@ -414,6 +415,7 @@ async def reject_applicant(
         )
 
     applicant.stage = ApplicantStage.rejected
+    applicant.decided_at = datetime.now(timezone.utc)
     applicant.rejection_note = payload.note
 
     should_save = payload.save_to_cv_bank or current_user.auto_save_cv_bank_on_reject
@@ -528,6 +530,7 @@ async def bulk_applicant_action(
             applicant.stage = ApplicantStage.coding_assessment
         else:
             applicant.stage = ApplicantStage.rejected
+            applicant.decided_at = datetime.now(timezone.utc)
             applicant.rejection_note = payload.note
             should_save = current_user.auto_save_cv_bank_on_reject
             applicant.saved_to_cv_bank = should_save

@@ -113,6 +113,8 @@ export interface Applicant {
   /** HR's own 1-5 rating (half steps) and notes on the candidate. */
   hrScore?: number;
   hrNotes?: string;
+  /** When the final hiring decision (accepted/rejected) was made. */
+  decidedAt?: string;
   stage: ApplicantStage;
   rejectionNote?: string;
   savedToCvBank?: boolean;

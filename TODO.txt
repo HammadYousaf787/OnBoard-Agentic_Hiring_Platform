@@ -4,7 +4,7 @@ Living document. Updated every iteration — add to it, check things off,
 don't delete history (move finished items to "RECENTLY DONE" instead of
 deleting them, so we keep a record of what's already been solved).
 
-Last updated: 2026-09-22 (slot removal + scheduling validation)
+Last updated: 2026-09-22 (board sorting, outcome cards, hiring decisions)
 
 
 STATUS SNAPSHOT
@@ -149,7 +149,12 @@ RECOMMENDATIONS (non-blocking, worth considering)
   ad hoc during this session).
 - Overlap check uses a fixed 60-minute slot for every interview (no per-interview
   duration) and doesn't consider the HR's time zone/working hours.
-- HR score isn't yet used anywhere else (job board sort/filter, dashboards).
+- PLANNED: coding assessment scores will also be included in the panel later
+  (shown next to the HR and AI ratings on each candidate row, sortable, and on
+  the candidate's profile). Needs the coding-assessment delivery/result flow
+  first (see the coding-assessment gap above).
+- HR score is now used for board sorting and shown on the admin decisions card;
+  still not used for filtering or in other dashboards.
   The review is free text only; no structured scorecard per interview.
 - Video interviews - known gaps: (1) speech-to-text uses the browser's Web
   Speech API, which only works in Chrome/Edge and sends audio to the browser
@@ -202,6 +207,25 @@ RECOMMENDATIONS (non-blocking, worth considering)
 
 RECENTLY DONE
 --------------
+- Layout polish (2026-09-22): the admin and HR sidebars are now sticky (full
+  viewport height, so Log out / AI usage stay put while the page scrolls; the
+  cause was html/body { height: 100% } capping the sticky containing block -
+  now body uses min-height) and can be collapsed to an icon rail with a toggle
+  on the sidebar edge (remembered per browser; nav badges become a dot, the AI
+  usage meter becomes an icon). Every job-board card (Applicants, Coding,
+  Interview Pending, Accepted, Rejected) now scrolls inside a max-height list
+  and rows/empty states are roomier.
+- Board sorting/flow + hiring decisions (2026-09-22): Applicants and Interview
+  Pending are sorted by HR score by default with a per-card sort menu (HR
+  score / AI score; Applicants also has "My order", the only mode with the
+  manual up/down arrows). Every row shows the HR and AI star ratings that
+  exist. Interview Pending no longer mixes in accepted candidates: a new
+  Accepted card sits above Rejected in the last column, with sleek left-to-right
+  flow arrows (Applicants -> Coding -> Interview -> Accepted / Rejected, wide
+  screens). Admin dashboard has a "Recent hiring decisions" card (name, job,
+  deciding HR, date, HR rating, Accepted/Rejected) backed by a new
+  applicants.decided_at (migration f6a7b8c9d0e1, backfilled from updated_at;
+  set on accept/reject/bulk reject).
 - Appointments page room-setup polish (2026-09-22): every row without a room
   has its own "Set up room" button (next to notify/edit/delete), interviews
   whose room already exists can no longer be selected or set up again (checkbox
