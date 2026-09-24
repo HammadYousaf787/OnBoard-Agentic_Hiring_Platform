@@ -12,6 +12,7 @@ import {
   Role,
   UserAccount,
   LiveAssist,
+  LiveInsight,
   RoomStatus,
   RtcCredentials,
   TranscriptSegment,
@@ -262,6 +263,15 @@ interface BackendAiUsageSummary {
   total_completion_tokens: number;
   by_provider: Record<string, number>;
   recent_events: BackendAiUsageEvent[];
+  openai_account: {
+    configured: boolean;
+    period_start: string | null;
+    period_end: string | null;
+    total_requests: number | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    error: string | null;
+  };
 }
 
 interface BackendAppointment {
@@ -277,6 +287,7 @@ interface BackendAppointment {
   room_started_at: string | null;
   room_ended_at: string | null;
   recording_enabled: boolean;
+  ai_assist_enabled?: boolean;
   interviewer_notes: string | null;
   interviewer_review: string | null;
   interviewer_reviewed_at: string | null;
@@ -455,6 +466,15 @@ function mapAiUsageSummary(s: BackendAiUsageSummary): AiUsageSummary {
       errorMessage: e.error_message ?? undefined,
       createdAt: e.created_at,
     })),
+    openaiAccount: {
+      configured: s.openai_account.configured,
+      periodStart: s.openai_account.period_start ?? undefined,
+      periodEnd: s.openai_account.period_end ?? undefined,
+      totalRequests: s.openai_account.total_requests ?? undefined,
+      inputTokens: s.openai_account.input_tokens ?? undefined,
+      outputTokens: s.openai_account.output_tokens ?? undefined,
+      error: s.openai_account.error ?? undefined,
+    },
   };
 }
 
@@ -472,6 +492,7 @@ function mapAppointment(a: BackendAppointment): Appointment {
     roomStartedAt: a.room_started_at ?? undefined,
     roomEndedAt: a.room_ended_at ?? undefined,
     recordingEnabled: a.recording_enabled,
+    aiAssistEnabled: a.ai_assist_enabled ?? false,
     interviewerNotes: a.interviewer_notes ?? undefined,
     interviewerReview: a.interviewer_review ?? undefined,
     interviewerReviewedAt: a.interviewer_reviewed_at ?? undefined,
@@ -899,14 +920,68 @@ export async function apiGenerateInterviewQuestions(
 
 export async function apiStartRoom(
   appointmentId: string,
-  recordingEnabled: boolean
+  recordingEnabled: boolean,
+  aiAssistEnabled: boolean
 ): Promise<Appointment> {
   return mapAppointment(
     await request<BackendAppointment>(`/appointments/${appointmentId}/room/start`, {
       method: "POST",
-      ...json({ recording_enabled: recordingEnabled }),
+      ...json({ recording_enabled: recordingEnabled, ai_assist_enabled: aiAssistEnabled }),
     })
   );
+}
+
+/** AI assistance can only be turned ON before the interview starts; during it, only off. */
+export async function apiSetAiAssistEnabled(
+  appointmentId: string,
+  enabled: boolean
+): Promise<Appointment> {
+  return mapAppointment(
+    await request<BackendAppointment>(`/appointments/${appointmentId}/room`, {
+      method: "PATCH",
+      ...json({ ai_assist_enabled: enabled }),
+    })
+  );
+}
+
+/** Interviewer's own-microphone clip -> backend -> OpenAI transcription -> transcript line. */
+export async function apiUploadAudioClip(
+  appointmentId: string,
+  clip: Blob,
+  durationMs: number
+): Promise<void> {
+  const body = new FormData();
+  body.append("audio", clip, clip.type.includes("mp4") ? "clip.m4a" : "clip.webm");
+  body.append("duration_ms", String(durationMs));
+  await request<unknown>(`/appointments/${appointmentId}/audio`, { method: "POST", body });
+}
+
+interface BackendInsight {
+  id: number;
+  question_segment_id: number;
+  question: string;
+  answer_summary: string;
+  depth: "shallow" | "adequate" | "strong";
+  should_probe: boolean;
+  recommendation: string;
+  follow_ups: string[];
+  created_at: string;
+}
+
+export async function apiListInsights(appointmentId: string, after: number): Promise<LiveInsight[]> {
+  return (
+    await request<BackendInsight[]>(`/appointments/${appointmentId}/insights?after=${after}`)
+  ).map((i) => ({
+    id: i.id,
+    questionSegmentId: i.question_segment_id,
+    question: i.question,
+    answerSummary: i.answer_summary,
+    depth: i.depth,
+    shouldProbe: i.should_probe,
+    recommendation: i.recommendation,
+    followUps: i.follow_ups,
+    createdAt: i.created_at,
+  }));
 }
 
 export async function apiSetRecordingEnabled(
@@ -1026,6 +1101,85 @@ export async function apiGetRecordingUrl(appointmentId: string): Promise<string 
 }
 
 // ---------------------------------------------------------------------------
+// HR assistant (LangGraph agent -- not usable until OPENAI_API_KEY is set)
+// ---------------------------------------------------------------------------
+
+export interface AssistantInterrupt {
+  action: string;
+  /** Free-form; for action "confirm_changes" it holds { title, items: string[] }. */
+  payload: Record<string, unknown>;
+}
+
+export interface AssistantAttachment {
+  name: string;
+  url: string;
+  downloadUrl: string;
+  kind: "pdf" | "image" | "video" | "file";
+}
+
+export interface AssistantReply {
+  reply?: string;
+  interrupt?: AssistantInterrupt;
+  attachments: AssistantAttachment[];
+}
+
+interface BackendAssistantReply {
+  reply: string | null;
+  interrupt: AssistantInterrupt | null;
+  attachments: { name: string; url: string; download_url: string; kind: string }[];
+}
+
+function mapAssistantReply(r: BackendAssistantReply): AssistantReply {
+  return {
+    reply: r.reply ?? undefined,
+    interrupt: r.interrupt ?? undefined,
+    attachments: (r.attachments ?? []).map((a) => ({
+      name: a.name,
+      url: a.url,
+      downloadUrl: a.download_url,
+      kind: (["pdf", "image", "video"].includes(a.kind) ? a.kind : "file") as AssistantAttachment["kind"],
+    })),
+  };
+}
+
+export async function apiSendAssistantMessage(message: string): Promise<AssistantReply> {
+  // The browser's timezone, so "10am" means the HR's 10am (the backend stores UTC).
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return mapAssistantReply(
+    await request<BackendAssistantReply>("/assistant/message", {
+      method: "POST",
+      ...json({ message, timezone }),
+    })
+  );
+}
+
+/** A confirmation left unanswered on the server (e.g. after a page reload), if any. */
+export async function apiGetPendingAssistantConfirmation(): Promise<AssistantInterrupt | null> {
+  const r = await request<BackendAssistantReply>("/assistant/pending");
+  return r.interrupt ?? null;
+}
+
+export async function apiResumeAssistant(
+  decision: "confirm" | "reject",
+  note?: string
+): Promise<AssistantReply> {
+  return mapAssistantReply(
+    await request<BackendAssistantReply>("/assistant/message", {
+      method: "POST",
+      ...json({ resume: { decision, note: note || null } }),
+    })
+  );
+}
+
+/** Mic button: uploads a recording, returns the transcript (not sent to the assistant). */
+export async function apiTranscribeAudio(blob: Blob): Promise<string> {
+  const body = new FormData();
+  body.append("audio", blob, blob.type.includes("mp4") ? "audio.m4a" : "audio.webm");
+  const r = await request<{ text: string }>("/assistant/transcribe", { method: "POST", body });
+  return r.text;
+}
+
+// ---------------------------------------------------------------------------
 // CV bank
 // ---------------------------------------------------------------------------
 
@@ -1046,7 +1200,7 @@ export async function apiDeleteCvBankEntry(entryId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// AI Job Review (real: Gemini + GitHub + LinkedIn) and usage meter
+// AI Job Review (real: OpenAI + GitHub + LinkedIn) and usage meter
 // ---------------------------------------------------------------------------
 
 export async function apiRunAiJobReview(applicantId: string): Promise<Applicant> {

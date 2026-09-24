@@ -3,7 +3,7 @@
 FastAPI backend for the Employee Onboarding Platform: authentication, users
 (admin/HR), jobs, applicants, interview appointments, the CV bank, and a
 real AI Job Review pipeline (GitHub + LinkedIn + CV vs. job description,
-scored by Gemini). PostgreSQL for data, MinIO for CV file storage.
+scored by OpenAI), the LangGraph HR agent, and live interview AI. PostgreSQL for data, MinIO for CV file storage.
 
 The frontend (`../frontend`) is fully wired to this backend — see its
 README for how to run both together.
@@ -19,7 +19,7 @@ Job Review pipeline — regenerate via `docs/render_pdf.py` if it matters.
 - Python 3.10 (newer versions may lack wheels for some dependencies)
 - A running PostgreSQL instance and database
 - A running MinIO instance
-- A Gemini API key (for AI Job Review) — free tier at [Google AI Studio](https://aistudio.google.com/)
+- An OpenAI API key (AI review, interview prep, live assistance, the HR agent and speech-to-text)
 - Optional: a GitHub personal access token (raises the API rate limit from 60/hr to 5000/hr; no scopes needed)
 - Optional: a Bright Data API token (required for the LinkedIn side of AI Job Review — without it, LinkedIn is scored as "unavailable" rather than failing)
 
@@ -48,11 +48,26 @@ CV files uploaded to MinIO:
 ./.venv/Scripts/python -m app.seed
 ```
 
+AI models are configured per task in `.env` (`OPENAI_MODEL_SCORING`,
+`OPENAI_MODEL_INTERVIEW_PREP`, `OPENAI_MODEL_LIVE_ASSIST`,
+`OPENAI_MODEL_ASSISTANT`); see `AVAILABLE_MODELS.txt` and `MODEL_PROBE.txt`.
+Live interview AI also uses `OPENAI_MODEL_INTERVIEW_TRANSCRIBE` (speech-to-text of both
+voices) and `OPENAI_MODEL_QA_ANALYSIS` (judges each answered question). It runs as a
+background task inside the API process (`app/core/live_interview.py`).
+The API needs MinIO running at startup (it hangs on "Waiting for application
+startup" otherwise).
+
 Run the API:
 
 ```bash
-./.venv/Scripts/python -m uvicorn app.main:app --port 8000
+./.venv/Scripts/python run.py
 ```
+
+**Use `run.py`, not `python -m uvicorn app.main:app` directly** -- the
+LangGraph HR assistant's checkpointer (psycopg v3, async) can't run on
+Windows' default event loop, and `run.py` is what sets the compatible one
+before uvicorn starts (see the comment in that file; setting it inside
+app.main itself is too late for this launch path).
 
 Interactive docs at `http://localhost:8000/docs`.
 
@@ -63,7 +78,7 @@ and still holding the socket, orphaned. If port 8000 seems stuck, check
 `Get-CimInstance Win32_Process -Filter "Name='python.exe'"` in PowerShell
 for a lingering `multiprocessing.spawn` child and stop it directly.
 
-## Demo accounts (if seeded)
+## Demo accounts (only if you run the seed script)
 
 | Role  | Email                    | Password    |
 | ----- | ------------------------ | ----------- |
@@ -88,7 +103,7 @@ app/
   integrations/
     github_client.py  Pulls a public GitHub profile's activity/repos (PyGithub)
     linkedin_client.py Pulls a LinkedIn profile via Bright Data (brightdata-sdk)
-    gemini_client.py  Sends CV + GitHub + LinkedIn to Gemini, asks for scores + reasoning
+    openai_client.py  One place for every OpenAI call (per-task models, retries, transcription)
   models/            SQLAlchemy ORM models (one file per table)
   schemas/           Pydantic request/response models
   routers/           auth, users, jobs, applicants (+ appointments), cv_bank, ai_review
@@ -107,7 +122,7 @@ real evaluation pipeline for one candidate:
    — skipped with a clear "unavailable" reason if `BRIGHTDATA_API_TOKEN`
    isn't configured.
 3. Sends both, plus the applicant's CV text (extracted from their upload)
-   and cover letter, plus the job description, to Gemini, asking for a
+   and cover letter, plus the job description, to OpenAI, asking for a
    1–5 score *and* a written reason for each of: communication, JD
    overlap, GitHub, LinkedIn, and overall.
 4. Stores the scores on the applicant and the full reasoning/snapshot in `ai_review_details` (JSONB).
@@ -115,10 +130,10 @@ real evaluation pipeline for one candidate:
    backs `GET /ai-usage/summary` (admin only) — the usage meter in the
    admin frontend.
 
-Each run is a real, metered call to GitHub/Bright Data/Gemini and can be
+Each run is a real, metered call to GitHub/Bright Data/OpenAI and can be
 started by an admin or the job's assigned HR. "Run AI on all" in the UI just
-runs this endpoint once per applicant, sequentially. Transient Gemini errors
-(503s, 429 rate limits) are retried up to 4 times, honouring Gemini's
+runs this endpoint once per applicant, sequentially. Transient OpenAI errors
+(503s, 429 rate limits) are retried up to 4 times, honouring OpenAI's
 "retry in Ns" hint. The result is a recommendation only.
 
 Ranking and moving applicants (assigned HR only):
@@ -162,7 +177,7 @@ for the candidate):
 3. Each browser transcribes only its own microphone (Web Speech API) and posts
    utterances (`POST .../transcript`), so speakers are always known. They land
    in `interview_segments`; the interviewer polls `GET .../transcript?after=`.
-4. `POST /appointments/{id}/live-assist` - Gemini reads the last ~60 transcript
+4. `POST /appointments/{id}/live-assist` - OpenAI reads the last ~60 transcript
    lines and suggests what to ask next (metered, logged to `ai_usage_events`).
 5. `POST /appointments/{id}/recording` - the interviewer's browser records a
    composite (remote + local video, mixed audio) and uploads it at the end.
@@ -193,7 +208,7 @@ rating/notes on a candidate: `PATCH /applicants/{id}/hr-assessment`
 
 AI interview questions: `POST /appointments/{id}/ai-questions {prompt?}` feeds
 CV text, cover letter, GitHub/LinkedIn (reusing the stored AI-review snapshots
-when present) and the job description to Gemini; the default style asks for a
+when present) and the job description to OpenAI; the default style asks for a
 natural, conversational interview and the optional `prompt` is the
 interviewer's priorities for that interview.
 

@@ -42,6 +42,20 @@ class AiUsageEventRead(BaseModel):
     created_at: datetime
 
 
+class OpenAiAccountUsageRead(BaseModel):
+    """Real account-level usage from OpenAI's Admin API (separate from this
+    app's own event log below) -- absent/None fields mean it isn't
+    configured or the lookup failed; see error."""
+
+    configured: bool
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    total_requests: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    error: str | None = None
+
+
 class AiUsageSummary(BaseModel):
     total_calls: int
     successful_calls: int
@@ -51,3 +65,4 @@ class AiUsageSummary(BaseModel):
     total_completion_tokens: int
     by_provider: dict[str, int]
     recent_events: list[AiUsageEventRead]
+    openai_account: OpenAiAccountUsageRead

@@ -8,6 +8,7 @@ special scopes needed) to raise that to 5000/hour.
 
 import re
 from datetime import datetime, timezone
+from itertools import islice
 
 from github import Github, GithubException
 
@@ -33,7 +34,7 @@ def fetch_github_summary(profile_url: str) -> dict:
     """
     Returns a compact, JSON-serializable summary of a GitHub profile:
     identity, repo/language stats, and recent public activity. Intended to
-    be embedded directly into the Gemini evaluation prompt.
+    be embedded directly into the OpenAI evaluation prompt.
     """
     username = _extract_username(profile_url)
     client = Github(settings.github_token) if settings.github_token else Github()
@@ -46,7 +47,9 @@ def fetch_github_summary(profile_url: str) -> dict:
         total_stars = 0
         last_pushed: datetime | None = None
 
-        for repo in list(user.get_repos(sort="updated", direction="desc")[:25]):
+        # islice, not [:25]: slicing a PyGithub PaginatedList raises IndexError for an
+        # account with no repositories, which used to crash the whole review/prep request.
+        for repo in islice(user.get_repos(sort="updated", direction="desc"), 25):
             if repo.fork:
                 continue
             if repo.language:
@@ -71,7 +74,7 @@ def fetch_github_summary(profile_url: str) -> dict:
         recent_event_types: dict[str, int] = {}
         recent_events_count = 0
         try:
-            for event in list(user.get_events()[:30]):
+            for event in islice(user.get_events(), 30):
                 recent_events_count += 1
                 recent_event_types[event.type] = recent_event_types.get(event.type, 0) + 1
         except GithubException:

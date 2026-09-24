@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Bot,
   Captions,
   Check,
   Circle,
@@ -21,7 +22,7 @@ import {
 } from "lucide-react";
 import { useAppData } from "@/context/AppDataContext";
 import * as api from "@/lib/api";
-import { Appointment, TranscriptSegment } from "@/lib/types";
+import { Appointment, LiveInsight, TranscriptSegment } from "@/lib/types";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -32,6 +33,7 @@ import { Label, Textarea } from "@/components/ui/Field";
 import { interviewsFor } from "@/lib/interviews";
 import { useAgoraCall } from "./useAgoraCall";
 import { useSpeechToText } from "./useSpeechToText";
+import { useChunkedTranscription } from "./useChunkedTranscription";
 import { useCallRecorder } from "./useCallRecorder";
 import { RemoteView } from "./RemoteView";
 import { ApplicationPanel, JobPanel, LiveAssistPanel, NotesPanel } from "./panels";
@@ -57,6 +59,7 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("notes");
   const [wantRecording, setWantRecording] = useState(false);
+  const [wantAiAssist, setWantAiAssist] = useState(false);
   const [recPaused, setRecPaused] = useState(false);
   const [recStarted, setRecStarted] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(true);
@@ -68,11 +71,13 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
   const [review, setReview] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [insights, setInsights] = useState<LiveInsight[]>([]);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const localRef = useRef<HTMLDivElement | null>(null);
   const pendingBlob = useRef<Blob | null>(null);
   const lastSegmentId = useRef(0);
+  const lastInsightId = useRef(0);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   const router = useRouter();
@@ -104,6 +109,7 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
         }
         setAppt(a);
         setWantRecording(a.recordingEnabled);
+        setWantAiAssist(a.aiAssistEnabled);
         setReview(a.interviewerReview ?? "");
       })
       .catch((err) => !cancelled && setLoadError(errorText(err)));
@@ -136,7 +142,11 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
         const fresh = await api.apiListTranscriptSegments(appointmentId, lastSegmentId.current);
         if (stopped || fresh.length === 0) return;
         lastSegmentId.current = fresh[fresh.length - 1].id;
-        setSegments((prev) => [...prev, ...fresh]);
+        setSegments((prev) =>
+          [...prev, ...fresh.filter((f) => !prev.some((p) => p.id === f.id))].sort(
+            (a, b) => new Date(a.spokenAt).getTime() - new Date(b.spokenAt).getTime() || a.id - b.id
+          )
+        );
       } catch {
         // transient; next tick retries
       }
@@ -148,6 +158,28 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
       window.clearInterval(t);
     };
   }, [live, appointmentId]);
+
+  // Poll per-question AI insights while live (produced asynchronously by the backend).
+  useEffect(() => {
+    if (!live || !appt?.aiAssistEnabled) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const fresh = await api.apiListInsights(appointmentId, lastInsightId.current);
+        if (stopped || fresh.length === 0) return;
+        lastInsightId.current = fresh[fresh.length - 1].id;
+        setInsights((prev) => [...prev, ...fresh]);
+      } catch {
+        // transient; next tick retries
+      }
+    };
+    void tick();
+    const t = window.setInterval(tick, 2500);
+    return () => {
+      stopped = true;
+      window.clearInterval(t);
+    };
+  }, [live, appt?.aiAssistEnabled, appointmentId]);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ block: "end" });
@@ -165,9 +197,20 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
     },
     [appointmentId]
   );
+  const aiAssist = !!appt?.aiAssistEnabled;
+  // Browser speech recognition is only the transcript source when AI assistance is off.
   const stt = useSpeechToText({
-    active: inCall && live === true && call.micOn && captionsOn,
+    active: inCall && live === true && call.micOn && captionsOn && !aiAssist,
     onFinal: postSegment,
+  });
+  // AI assistance on: once the candidate is in the room, send our own mic audio (in short
+  // clips cut at pauses) to the backend for OpenAI transcription. The candidate's browser
+  // does the same for theirs, so the backend hears both sides.
+  const candidateHere = call.remoteUsers.length > 0;
+  const aiStt = useChunkedTranscription({
+    active: inCall && live === true && aiAssist && candidateHere && captionsOn,
+    getTrack: call.getLocalAudioTrack,
+    upload: (clip, ms) => api.apiUploadAudioClip(appointmentId, clip, ms),
   });
 
   async function copyLink() {
@@ -204,7 +247,7 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
     setBusy("start");
     setActionError(null);
     try {
-      const started = await api.apiStartRoom(appt.id, wantRecording);
+      const started = await api.apiStartRoom(appt.id, wantRecording, wantAiAssist);
       updateAppt(started);
       await joinCall(started, wantRecording);
     } catch (err) {
@@ -244,6 +287,15 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
         recorder.pause();
         setRecPaused(true);
       }
+    } catch (err) {
+      setActionError(errorText(err));
+    }
+  }
+
+  async function stopAiAssist() {
+    if (!appt) return;
+    try {
+      updateAppt(await api.apiSetAiAssistEnabled(appt.id, false));
     } catch (err) {
       setActionError(errorText(err));
     }
@@ -334,6 +386,11 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
               Recording
             </Badge>
           )}
+          {live && aiAssist && (
+            <Badge tone="blue" dot>
+              AI assist
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -393,6 +450,19 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
                     className="h-4 w-4 accent-indigo-600"
                   />
                   Record video (saved after the call; the candidate is told)
+                </label>
+                <label className="mt-3 flex cursor-pointer items-start justify-center gap-2 text-left text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={wantAiAssist}
+                    onChange={(e) => setWantAiAssist(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-indigo-600"
+                  />
+                  <span>
+                    Live AI assistance — both voices are transcribed by OpenAI and each answered
+                    question is evaluated for you. The candidate is told, and this can&apos;t be
+                    turned on after the call starts.
+                  </span>
                 </label>
 
                 <Button className="mt-5" onClick={startRoom} loading={busy === "start"}>
@@ -459,6 +529,12 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
                     <Circle className={`h-4 w-4 ${recordingNow ? "fill-current" : ""}`} />
                     {recordingNow ? "Stop recording" : "Record video"}
                   </Button>
+                  {aiAssist && (
+                    <Button variant="secondary" onClick={stopAiAssist} aria-label="Turn AI assistance off">
+                      <Bot className="h-4 w-4" />
+                      Stop AI assist
+                    </Button>
+                  )}
                   <Button
                     variant={captionsOn ? "primary" : "secondary"}
                     onClick={() => setCaptionsOn((v) => !v)}
@@ -486,9 +562,21 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
               {inCall && (
                 <p
                   data-testid="stt-status"
-                  className={`text-center text-xs ${stt.error ? "text-danger" : "text-muted"}`}
+                  className={`text-center text-xs ${(aiAssist ? aiStt.error : stt.error) ? "text-danger" : "text-muted"}`}
                 >
-                  {!stt.supported
+                  {aiAssist
+                    ? aiStt.error
+                      ? aiStt.error
+                      : !captionsOn
+                        ? "Transcription is off."
+                        : !call.micOn
+                          ? "Transcription is paused while your microphone is muted."
+                          : !candidateHere
+                            ? "AI assistance is on — transcription starts when the candidate joins."
+                            : aiStt.listening
+                              ? "AI assistance is on — your speech and the candidate's are being transcribed."
+                              : "Starting transcription…"
+                    : !stt.supported
                     ? "Live transcription needs a browser with speech recognition (Chrome or Edge)."
                     : stt.error
                       ? stt.error
@@ -559,6 +647,7 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
               >
                 {t.id === "live" && <Sparkles className="mr-1 inline h-3 w-3" />}
                 {t.label}
+                {t.id === "live" && insights.length > 0 && ` (${insights.length})`}
               </button>
             ))}
           </div>
@@ -571,7 +660,8 @@ export function InterviewRoomClient({ appointmentId }: { appointmentId: string }
               <LiveAssistPanel
                 appointmentId={appt.id}
                 live={!!live}
-                segmentCount={segments.length}
+                aiAssistEnabled={aiAssist}
+                insights={insights}
               />
             )}
           </div>

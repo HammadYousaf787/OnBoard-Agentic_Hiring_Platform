@@ -64,7 +64,7 @@ export function HrSidebar({
         {!compact && (
           <div>
             <p className="text-sm font-semibold text-foreground leading-tight">
-              Onboard<span className="text-primary">HQ</span>
+              On<span className="text-primary">Board</span>
             </p>
             <p className="text-[11px] text-muted leading-tight">HR Console</p>
           </div>

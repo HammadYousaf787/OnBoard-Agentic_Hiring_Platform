@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
+  Bot,
   Captions,
   CheckCircle2,
   Circle,
@@ -21,9 +22,11 @@ import {
   joinInterview,
   postSegment,
   StateResult,
+  uploadAudioClip,
 } from "@/lib/interview";
 import { useAgoraCall } from "@/components/interview/useAgoraCall";
 import { useSpeechToText } from "@/components/interview/useSpeechToText";
+import { useChunkedTranscription } from "@/components/interview/useChunkedTranscription";
 import { RemoteView } from "@/components/interview/RemoteView";
 
 function Notice({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
@@ -34,6 +37,25 @@ function Notice({ icon, title, body }: { icon: React.ReactNode; title: string; b
       </div>
       <h1 className="text-lg font-semibold text-foreground">{title}</h1>
       <p className="mt-2 text-sm text-muted">{body}</p>
+    </div>
+  );
+}
+
+/** Shown before the candidate joins and again during the call, like the recording notice. */
+function AiNotice({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      data-testid="ai-notice"
+      className={`flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 text-left text-blue-900 ${
+        compact ? "px-3 py-1.5 text-xs" : "px-3.5 py-3 text-sm"
+      }`}
+    >
+      <Bot className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>
+        <span className="font-medium">AI interview assistance is on.</span> Your voice will be
+        transcribed and analysed by an AI service (OpenAI) to help the interviewer ask follow-up
+        questions. AI does not make hiring decisions.
+      </span>
     </div>
   );
 }
@@ -73,7 +95,15 @@ export function InterviewClient({ token }: { token: string }) {
   }, [ended, joined, leave]);
 
   const onFinal = useCallback((text: string) => void postSegment(token, text), [token]);
-  const stt = useSpeechToText({ active: joined && !!live && call.micOn, onFinal });
+  const aiAssist = !!state?.ai_assist_enabled;
+  // Browser speech recognition is only used when AI assistance is off; with it on, our
+  // own microphone is sent to the backend in short clips for OpenAI transcription.
+  const stt = useSpeechToText({ active: joined && !!live && call.micOn && !aiAssist, onFinal });
+  const aiStt = useChunkedTranscription({
+    active: joined && !!live && aiAssist,
+    getTrack: call.getLocalAudioTrack,
+    upload: (clip, ms) => uploadAudioClip(token, clip, ms),
+  });
 
   async function join() {
     setJoining(true);
@@ -146,6 +176,14 @@ export function InterviewClient({ token }: { token: string }) {
             })}
           </p>
         </div>
+        {s.ai_assist_enabled && live && (
+          <span
+            data-testid="ai-banner"
+            className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800"
+          >
+            <Bot className="h-3 w-3" /> AI assistance is on
+          </span>
+        )}
         {s.recording_enabled && live && (
           <span
             data-testid="recording-banner"
@@ -163,6 +201,11 @@ export function InterviewClient({ token }: { token: string }) {
           body={`${s.interviewer_name} hasn't opened the room yet. Keep this page open — it will let you join as soon as they start.`}
         />
       )}
+      {!live && s.ai_assist_enabled && (
+        <div className="mx-auto mt-4 max-w-md">
+          <AiNotice />
+        </div>
+      )}
 
       {live && !joined && (
         <div className="mx-auto max-w-md rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
@@ -171,10 +214,17 @@ export function InterviewClient({ token }: { token: string }) {
           </div>
           <h2 className="text-lg font-semibold text-foreground">The interviewer is ready</h2>
           <p className="mt-2 text-sm text-muted">
-            You&apos;ll be asked for camera and microphone access. Your speech is transcribed in
-            your browser and shared with the interviewer as interview notes
+            You&apos;ll be asked for camera and microphone access.{" "}
+            {s.ai_assist_enabled
+              ? "Your speech is transcribed and shared with the interviewer as interview notes"
+              : "Your speech is transcribed in your browser and shared with the interviewer as interview notes"}
             {s.recording_enabled ? ", and the video is being recorded" : ""}.
           </p>
+          {s.ai_assist_enabled && (
+            <div className="mt-4">
+              <AiNotice />
+            </div>
+          )}
           {joinError && (
             <p className="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{joinError}</p>
           )}
@@ -245,10 +295,18 @@ export function InterviewClient({ token }: { token: string }) {
 
           <p
             data-testid="stt-status"
-            className={`flex items-center justify-center gap-1.5 text-xs ${stt.error ? "text-danger" : "text-muted"}`}
+            className={`flex items-center justify-center gap-1.5 text-xs ${(aiAssist ? aiStt.error : stt.error) ? "text-danger" : "text-muted"}`}
           >
             <Captions className="h-3.5 w-3.5 shrink-0" />
-            {!stt.supported
+            {aiAssist
+              ? aiStt.error
+                ? aiStt.error
+                : !call.micOn
+                  ? "Transcription is paused while your microphone is muted."
+                  : aiStt.listening
+                    ? "Your speech is being transcribed by AI for the interviewer's notes."
+                    : "Starting transcription…"
+              : !stt.supported
               ? "Live transcription isn't supported in this browser (use Chrome or Edge)."
               : stt.error
                 ? stt.error

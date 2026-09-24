@@ -55,7 +55,7 @@ class Applicant(Base):
     overall_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     ranked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Populated only by the real "AI Job Review" pipeline (Gemini + GitHub +
+    # Populated only by the real "AI Job Review" pipeline (OpenAI + GitHub +
     # LinkedIn), never by the mock per-job ranking above -- its presence is
     # what distinguishes a real, explained review from the mock one. Holds
     # per-category reasoning text, raw GitHub/LinkedIn snapshots used, and

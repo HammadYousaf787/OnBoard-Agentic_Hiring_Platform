@@ -21,10 +21,18 @@ pyjwt==2.10.1
 minio==7.2.13
 
 # AI review pipeline
-google-genai==2.24.0
+openai==3.18.0
+httpx==0.28.1
 PyGithub==2.10.0
 brightdata-sdk==2.5.2
 pypdf==6.19.0
+matplotlib==3.10.9
 
 # Video interviews
 agora-token-builder==1.0.0
+
+# HR assistant agent (LangGraph)
+langgraph==1.2.12
+langchain-openai==1.6.4
+langgraph-checkpoint-postgres==3.1.2
+tzdata==2026.4

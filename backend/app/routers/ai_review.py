@@ -9,13 +9,14 @@ from app.config import get_settings
 from app.core.applicant_context import gather_online_profiles
 from app.database import get_db
 from app.deps import require_admin, require_any_role
-from app.integrations.gemini_client import GeminiError, evaluate_applicant
+from app.integrations.openai_client import AiProviderError, evaluate_applicant, model_for
+from app.integrations.openai_usage import fetch_account_usage
 from app.models.ai_usage import AiUsageEvent
 from app.models.applicant import Applicant
 from app.models.enums import Role
 from app.models.job import Job
 from app.models.user import User
-from app.schemas.ai_review import AiUsageEventRead, AiUsageSummary
+from app.schemas.ai_review import AiUsageEventRead, AiUsageSummary, OpenAiAccountUsageRead
 from app.schemas.applicant import ApplicantRead
 
 router = APIRouter(tags=["ai-review"])
@@ -37,7 +38,7 @@ async def run_ai_job_review(
     """
     Runs the real AI Job Review for one applicant: GitHub activity
     (PyGithub) and LinkedIn (Bright Data) where available, plus their
-    CV/cover letter and the job description, sent to Gemini for a scored
+    CV/cover letter and the job description, sent to OpenAI for a scored
     and explained evaluation. Admins or the job's assigned HR may run it.
     The result is a recommendation only -- it never moves the applicant.
     """
@@ -60,11 +61,11 @@ async def run_ai_job_review(
         result, usage = await evaluate_applicant(
             job, applicant, github_summary, github_error, linkedin_summary, linkedin_error
         )
-    except GeminiError as exc:
+    except AiProviderError as exc:
         db.add(
             AiUsageEvent(
-                provider="gemini",
-                model_name=settings.gemini_model,
+                provider="openai",
+                model_name=model_for("applicant_ai_review"),
                 purpose="applicant_ai_review",
                 applicant_id=applicant.id,
                 triggered_by_id=current_user.id,
@@ -93,15 +94,15 @@ async def run_ai_job_review(
         "linkedin_error": linkedin_error,
         "github_snapshot": github_summary,
         "linkedin_snapshot": linkedin_summary,
-        "model": settings.gemini_model,
+        "model": model_for("applicant_ai_review"),
         "generated_at": generated_at.isoformat(),
     }
     db.add(applicant)
 
     db.add(
         AiUsageEvent(
-            provider="gemini",
-            model_name=settings.gemini_model,
+            provider="openai",
+            model_name=model_for("applicant_ai_review"),
             purpose="applicant_ai_review",
             applicant_id=applicant.id,
             triggered_by_id=current_user.id,
@@ -152,6 +153,8 @@ async def get_ai_usage_summary(
     )
     recent_events = [AiUsageEventRead.model_validate(e) for e in recent_result.scalars().all()]
 
+    account_usage = await fetch_account_usage()
+
     return AiUsageSummary(
         total_calls=total_calls,
         successful_calls=successful_calls,
@@ -161,4 +164,13 @@ async def get_ai_usage_summary(
         total_completion_tokens=completion_tokens,
         by_provider=by_provider,
         recent_events=recent_events,
+        openai_account=OpenAiAccountUsageRead(
+            configured=account_usage.configured,
+            period_start=account_usage.period_start,
+            period_end=account_usage.period_end,
+            total_requests=account_usage.total_requests,
+            input_tokens=account_usage.input_tokens,
+            output_tokens=account_usage.output_tokens,
+            error=account_usage.error,
+        ),
     )

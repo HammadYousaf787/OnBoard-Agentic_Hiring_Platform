@@ -1,0 +1,57 @@
+[
+  {
+    "name": "Areeba Khan",
+    "title": "Machine Learning Engineer",
+    "years": 4,
+    "city": "Lahore",
+    "email": "areeba.khan@example.com",
+    "phone": "+92 300 1200101",
+    "github": "github.com/areeba-khan-ml-demo",
+    "linkedin": "linkedin.com/in/areeba-khan",
+    "summary": "Machine learning engineer with 4 years of experience taking NLP and recommendation models from research notebooks to production APIs. Comfortable across data pipelines, model training, evaluation and MLOps."
+  },
+  {
+    "name": "Daniyal Mirza",
+    "title": "Senior AI Engineer",
+    "years": 6,
+    "city": "Karachi",
+    "email": "daniyal.mirza@example.com",
+    "phone": "+92 301 2300202",
+    "github": "github.com/dmirza-ai",
+    "linkedin": "linkedin.com/in/daniyal-mirza",
+    "summary": "AI engineer with 6 years building LLM-powered products and internal tooling. Focused on reliable agents, evaluation harnesses and cost-aware inference."
+  },
+  {
+    "name": "Mahnoor Iqbal",
+    "title": "Data Scientist → AI Engineer",
+    "years": 3,
+    "city": "Islamabad",
+    "email": "mahnoor.iqbal@example.com",
+    "phone": "+92 302 3400303",
+    "github": "github.com/mahnoor-iqbal-ai-demo",
+    "linkedin": "linkedin.com/in/mahnoor-iqbal",
+    "summary": "Data scientist moving into applied AI engineering. 3 years of forecasting and classification work, plus recent projects with LLM tooling and vector search."
+  },
+  {
+    "name": "Hassan Javed",
+    "title": "NLP Engineer",
+    "years": 5,
+    "city": "Lahore",
+    "email": "hassan.javed@example.com",
+    "phone": "+92 303 4500404",
+    "github": "github.com/hassanjaved-nlp",
+    "linkedin": "linkedin.com/in/hassan-javed",
+    "summary": "NLP engineer with 5 years of experience in text classification, entity extraction and multilingual (English / Urdu) language models."
+  },
+  {
+    "name": "Sana Farooqi",
+    "title": "Computer Vision Engineer",
+    "years": 2,
+    "city": "Rawalpindi",
+    "email": "sana.farooqi@example.com",
+    "phone": "+92 304 5600505",
+    "github": "github.com/sana-farooqi",
+    "linkedin": "linkedin.com/in/sana-farooqi",
+    "summary": "Computer vision engineer with 2 years of experience in object detection and edge deployment, interested in multimodal models."
+  }
+]

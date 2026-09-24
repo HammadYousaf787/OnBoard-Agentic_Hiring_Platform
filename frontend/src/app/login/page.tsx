@@ -65,7 +65,7 @@ export default function LoginPage() {
             O
           </div>
           <h1 className="text-lg font-semibold text-foreground">
-            Onboard<span className="text-primary">HQ</span>
+            On<span className="text-primary">Board</span>
           </h1>
           <p className="mt-1 text-sm text-muted">Sign in to your recruitment console</p>
         </div>

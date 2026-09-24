@@ -91,7 +91,7 @@ export default function ApprovalsPage() {
               description="There are no pending account requests right now."
             />
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="max-h-96 divide-y divide-border overflow-y-auto">
               {pending.map((user) => (
                 <li
                   key={user.id}
@@ -155,7 +155,7 @@ export default function ApprovalsPage() {
           {recentDecisions.length === 0 ? (
             <EmptyState icon={ShieldCheck} title="No decisions recorded yet" />
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="max-h-96 divide-y divide-border overflow-y-auto">
               {recentDecisions.map((event) => (
                 <li key={event.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
                   <div>

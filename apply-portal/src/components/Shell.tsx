@@ -8,7 +8,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           O
         </div>
         <p className="text-sm font-semibold text-foreground">
-          Onboard<span className="text-primary">HQ</span> Careers
+          On<span className="text-primary">Board</span> Careers
         </p>
       </Link>
       {children}

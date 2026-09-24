@@ -1,0 +1,295 @@
+HR ASSISTANT -- LANGGRAPH SETUP
+================================
+Written 2026-09-23. Read this before touching graph.py/state.py/tools/ --
+it explains WHY the graph looks the way it does, not just what the code
+does. Built with OpenAI models (langchain_openai.ChatOpenAI); the rest of
+this app's AI features (applicant review, interview questions, live
+assist) moved to OpenAI in the same change -- see
+app/integrations/openai_client.py.
+
+STATUS: working (verified 2026-09-24 with a real key: tool calls, charts,
+and the confirm-before-booking flow). Model = OPENAI_MODEL_ASSISTANT in .env
+(gpt-5.4); the other AI features use nano models via model_for(purpose).
+If a model rejects `temperature`, graph.py's agent node retries without it
+(NO_TEMPERATURE in openai_client.py). The system prompt (prompts.py) is
+built per call with today's date so "tomorrow"/"Wednesday" resolve. If the
+key is missing/invalid /assistant/message returns a clean 502.
+
+
+THE GRAPH ITSELF IS TINY
+-------------------------
+Two real nodes. This surprises people learning LangGraph -- almost all the
+design work below is in the state schema, the tools, and where the
+human-in-the-loop pause lives, not in graph shape.
+
+    START --> agent --(tool calls?)--> tools --> agent --(no tool calls)--> END
+                 ^_________________________________|
+
+  - "agent" (graph.py:_agent_node): one ChatOpenAI call, bound to every
+    tool in tools/ALL_TOOLS, given the system prompt (prompts.py) plus the
+    conversation so far.
+  - "tools" (a prebuilt ToolNode): executes whatever tool calls the model
+    just asked for.
+  - The conditional edge is LangGraph's own `tools_condition` helper: tool
+    calls present -> "tools", none -> END. This is the standard ReAct loop
+    -- nothing custom about the routing.
+
+This is a general lesson, not specific to this app: "the model can call
+several tools in sequence" does NOT by itself mean you need more graph
+structure. It just means the loop runs more than once. Extra nodes are for
+when the *shape* of the workflow needs something a bare "list of tools,
+model picks" loop can't express (see the LangGraph-vs-not discussion this
+was designed in, and the "when would I actually need LangGraph" list from
+that conversation -- multi-agent handoffs, durable resumable workflows,
+deterministic non-LLM-decided branching, explicit cyclic loops).
+
+
+WHERE THE HUMAN-IN-THE-LOOP PAUSE LIVES
+-----------------------------------------
+The one tool that changes real data -- schedule_interview
+(tools/scheduling.py) -- calls LangGraph's `interrupt()` *inside the tool
+function itself*, before it writes anything to the database:
+
+    def schedule_interview(applicant_id, scheduled_at, state):
+        decision = interrupt({"action": "schedule_interview", ...})
+        if decision["decision"] != "confirm":
+            return "not booked"
+        ... validate + write the appointment ...
+
+This is the idiomatic LangGraph pattern for "this action needs approval",
+and deliberately NOT a separate graph node. When the ToolNode reaches this
+tool, `interrupt()` freezes execution right there -- mid-tool, before the
+DB write -- and the checkpointer (see below) persists that paused state.
+The API call that triggered it returns immediately with an `__interrupt__`
+payload instead of a normal reply; the frontend shows a confirm/adjust UI
+(AssistantPanel.tsx) instead of a chat bubble.
+
+Resuming is NOT a new message -- it's `graph.ainvoke(Command(resume={...}),
+config)` with the SAME thread_id. Execution resumes inside that exact
+`interrupt()` call, with the resume value as its return value. If the HR
+instead types something like "an hour later" (routers/assistant.py's
+`resume: {decision: "reject", note: "an hour later"}`), the tool returns
+that as a ToolMessage, the loop goes back to "agent", and the model
+re-proposes a time -- same two-node graph, no special-casing needed.
+
+Why not a dedicated `confirm_booking` node instead? Both work. A separate
+node is easier to *see* on a diagram while learning the framework, but
+putting the interrupt inside the tool is what LangGraph's own docs use for
+"approve this specific tool call" and is less code. If you want to try the
+node-based version as an exercise: route the agent's tool_calls through a
+custom conditional edge that checks the tool name before falling into
+tools_condition, send schedule_interview calls to a `confirm_booking` node
+that calls interrupt(), and only on confirm dispatch to a `book_interview`
+node that does the write.
+
+The actual booking, once confirmed, calls
+app.routers.applicants.validate_interview_slot -- the SAME conflict-check
+function the "Schedule interview" button in the UI uses. There is exactly
+one scheduling implementation; the agent cannot create an appointment the
+UI's own rules would reject.
+
+
+STATE (state.py)
+-----------------
+    class HrAssistantState(TypedDict):
+        messages: Annotated[list, add_messages]   # standard chat reducer
+        hr_id: str                                 # see security below
+
+Nothing else. Every tool that needs more context (which job, which
+applicant) gets it as a normal tool argument the model fills in --
+hr_id is the only field that's injected rather than asked for.
+
+
+IDENTITY / SECURITY (security.py, InjectedState)
+--------------------------------------------------
+hr_id is set exactly once, in routers/assistant.py, from the authenticated
+User (require_hr -- the same dependency every other HR endpoint uses). It
+is never part of any tool's JSON schema. Tools receive it like this:
+
+    @tool
+    async def list_my_jobs(state: Annotated[HrAssistantState, InjectedState]) -> str:
+        hr_id = uuid.UUID(state["hr_id"])
+        ...
+
+`InjectedState` means the model literally never sees an "hr_id" parameter
+to fill in -- there's nothing to spoof. Every query is then scoped the same
+way the REST endpoints already scope it (Job.assigned_hr_id == hr_id,
+Appointment.hr_id == hr_id, etc.) -- the tools re-apply that rule by hand
+since they have no FastAPI request/Depends() chain to inherit it from.
+
+
+TOOLS (tools/)
+---------------
+One file per domain, mirroring how routers/ is already split:
+
+  jobs.py         list_my_jobs, get_job_details, get_expected_pay_stats
+                  (the pay-stats tool currently just explains that
+                  applicants don't report expected pay on the form yet --
+                  no field exists to aggregate, so it says so instead of
+                  inventing a number)
+  applicants.py   list_my_applicants, get_applicant, count_by_stage
+  interviews.py   get_interview_history, get_interview_record (reports
+                  whether a recording/transcript exists, not their bytes --
+                  those stay in MinIO, read by the record page, not pasted
+                  into a chat)
+  cv.py           get_applicant_cv_file / get_cv_bank_file (the real PDF as
+                  an ATTACHMENT), search_cv_bank, and
+                  get_applicant_cv_text -- returns Applicant.cv_summary,
+                  the text already extracted at application time
+                  (core/cv_extract.py). Deliberately does NOT re-read the
+                  PDF from MinIO on every question.
+  scheduling.py   reads: check_availability, suggest_free_slots,
+                  list_my_interviews. Writes (each takes a LIST, one grouped
+                  confirmation): schedule_interviews, reschedule_interviews,
+                  cancel_interviews; plus set_interview_reminders.
+  applicant_actions.py  set_hr_ratings, run_ai_reviews, move_applicants
+                  (coding assessment / interview pending / accepted /
+                  rejected), save_rejected_to_cv_bank, set_applicant_ranking,
+                  delete_applicants, set_auto_save_rejected_cvs
+  interview_actions.py  setup_interview_rooms, set_interview_recording,
+                  set_interview_ai_assist (on only before the call starts),
+                  save_interview_notes, save_interview_review,
+                  generate_interview_questions, get_interview_transcript,
+                  get_interview_recording (file attachment)
+  job_actions.py  update_job (partial edit + confirm). Job create/assign are
+                  admin-only, job delete is deliberately NOT exposed.
+  combined.py     apply_changes -- ONE confirmation for a request that mixes
+                  kinds of change (bookings + moves + cancels + stage moves)
+  _actions.py     shared plumbing: call(), ask_confirmation(), Prepared,
+                  timezone helpers, attachment()
+  charts.py       generate_chart -- matplotlib, headless (Agg backend),
+                  saves the PNG to MinIO (core/storage.put_bytes) under
+                  assistant-charts/{hr_id}/..., returns it as an image
+                  ATTACHMENT (presigned URL).
+                  Same "blobs in MinIO, pointer everywhere else" rule this
+                  app already follows for CVs and recordings -- no base64
+                  images passed through the conversation.
+
+tools/__init__.py concatenates them all into ALL_TOOLS, which is what both
+the "agent" node binds and the ToolNode executes.
+
+
+PERSISTENCE (checkpointer.py) -- AND THE WINDOWS GOTCHA
+----------------------------------------------------------
+AsyncPostgresSaver, pointed at the same Postgres database as everything
+else (SYNC_DATABASE_URL with the driver swapped: psycopg v3 needs
+"postgresql://", not "postgresql+psycopg2://"). It manages its own tables
+(checkpoints, checkpoint_writes, ...) via .setup() on first use --
+deliberately NOT part of the Alembic migration chain; that schema belongs
+to LangGraph, not this app's domain model.
+
+One thread per HR user: thread_id = f"hr-{user.id}" (routers/assistant.py).
+That's what makes the chat durable across page loads/requests without the
+frontend tracking any history itself, and what lets a paused booking
+confirmation survive a backend restart.
+
+Gotcha, Windows only: psycopg's async connection cannot run on Windows'
+default ProactorEventLoop -- it raises InterfaceError. The fix has to
+happen before uvicorn creates the process's event loop, which is BEFORE
+app.main is ever imported when launched as `python -m uvicorn app.main:app`
+(that command's asyncio.run() creates the loop first, then imports the
+app -- too late for a policy set inside app.main to matter). That's why
+there's now a backend/run.py entry point that sets
+WindowsSelectorEventLoopPolicy() first and then calls uvicorn.run(...) --
+**run the backend with `python run.py`, not `-m uvicorn` directly.** See
+the comments in run.py and app/main.py for the full explanation.
+
+
+HTTP LAYER (routers/assistant.py)
+-----------------------------------
+POST /assistant/message, require_hr. Body is exactly one of:
+  {"message": "...", "timezone": "Asia/Karachi"}  -- a new chat message
+  {"resume": {"decision": "confirm"|"reject", "note": "..."}}   -- answers
+                                                   a pending interrupt
+
+Response is exactly one of:
+  {"reply": "...", "attachments": [{name,url,download_url,kind}]}  -- an answer
+  {"interrupt": {"action": "confirm_changes",
+                 "payload": {"title": "...", "items": ["...", ...]}}}  -- paused
+GET /assistant/pending returns an unanswered interrupt (page reloaded); a
+new chat message while one is pending just returns it again (otherwise the
+model would see a tool call with no result).
+
+This file is the ONLY place that knows about FastAPI/JWT/HTTP. graph.py,
+state.py, and everything in tools/ can be imported and unit-tested with no
+request object in sight -- that separation is deliberate (see the "don't
+let the graph package import from routers/" rule from the folder-structure
+discussion this was built from).
+
+
+WHAT'S NOT BUILT YET
+----------------------
+- No conversation history endpoint -- the frontend panel only shows what
+  was sent/received in the current page load, even though the checkpointer
+  is already persisting full history server-side per thread_id. Add a
+  GET /assistant/history if that's wanted.
+- Only the tools listed above exist. More were sketched in design
+  (get_job_stats beyond seats, org-wide search, etc.) -- add them to the
+  matching file in tools/ and export from tools/__init__.py; nothing else
+  needs to change.
+- get_expected_pay_stats has nothing to report until the public application
+  form collects an expected-pay field.
+- No rate limiting or per-HR usage cap on assistant calls (the rest of the
+  app's AI usage log, ai_usage_events, does NOT currently record assistant
+  calls -- only applicant review / interview questions / live assist do).
+
+
+VOICE INPUT (added 2026-09-24)
+------------------------------
+Audio is NOT part of the graph. POST /assistant/transcribe (routers/
+assistant.py) turns a recording into text with OpenAI's transcription model
+(OPENAI_MODEL_TRANSCRIBE, default gpt-4o-mini-transcribe); the frontend
+puts that text in the input box and the user sends it through the normal
+/assistant/message path. Keeping it outside the graph means the agent, its
+checkpointed history and the confirm-before-booking step are unchanged.
+
+
+FULL HR TOOLKIT (added 2026-09-24)
+----------------------------------
+The assistant can do what an HR can do in the UI. Four rules keep that safe:
+
+1. ONE IMPLEMENTATION. Every write tool executes by calling the SAME router
+   function the UI button calls (app/routers/*.py), passing the HR's real
+   User. Stage rules, slot-overlap checks, ownership checks, AI-usage logging
+   all live only there. This is a deliberate exception to "the assistant
+   package doesn't import routers": tools call router *functions* directly
+   (db=..., current_user=...), never over HTTP. If a router function changes
+   its signature, the tool that calls it must change too.
+
+2. GROUPED CONFIRMATION. Hard-to-undo changes (booking / moving / cancelling
+   interviews, stage moves incl. accept & reject, deleting candidates,
+   editing a job) pause with interrupt() -- once per tool call, and the write
+   tools take lists, so "schedule all on Wednesday" is one card. For requests
+   that mix kinds of change, apply_changes prepares everything, shows one card,
+   then runs cancellations -> reschedules -> bookings -> stage moves. Every
+   confirming tool is split into prepare_*() (read-only: validates, builds the
+   card lines, drops hopeless items with a reason) and run_*() (writes).
+   Anything before interrupt() must be read-only because LangGraph re-runs the
+   tool from the top on resume. Not confirmed (cheap, easy to redo): ratings &
+   notes (notes append by default), AI reviews, room setup, recording toggle,
+   AI questions, ranking, CV-bank saving.
+   graph.py binds tools with parallel_tool_calls=False so two confirming
+   tools can never be waiting at once.
+
+3. FILES ARE ATTACHMENTS. Tools that return files (CV PDFs, recordings,
+   charts) use @tool(response_format="content_and_artifact"): the text the
+   model sees is just "attached X"; the file list rides in ToolMessage.artifact.
+   routers/assistant.py collects artifacts produced since the HR's last message
+   and returns them as `attachments`; the panel renders file cards / images.
+   URLs are presigned and expire (60 min).
+
+4. TIMEZONES. The browser sends its IANA timezone with each message
+   (state["tz"]). The prompt tells the model the HR's zone; tools take
+   datetimes WITHOUT an offset and read them as HR-local time, and print times
+   back in HR-local time -- the model never does UTC arithmetic. Storage is
+   still UTC.
+
+Deliberately not exposed: creating/assigning jobs and user management (admin
+only), deleting a job (cascades to all its applicants), starting/ending the
+live video call (that happens in the browser room page), moving a candidate
+backwards (the UI doesn't allow it either).
+
+Known limits: batches are validated against the calendar as it is now, so a
+booking into a slot freed by another change in the same batch reports a
+conflict; the panel doesn't refresh other open pages after the assistant
+changes data (reload to see it).

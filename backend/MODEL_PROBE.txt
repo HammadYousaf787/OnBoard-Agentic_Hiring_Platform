@@ -1,0 +1,49 @@
+MODEL PROBE -- our real request shape against candidate models
+json = applicant-review style JSON reply; tools = one tool-calling turn.
++temp/-temp = with/without the temperature parameter our code currently sends.
+
+=== gpt-5.4-nano
+  json  +temp : OK  5.5s in=1046 out=447 reasoning=0 schema_ok=True overall=2.5
+  json  -temp : OK  4.0s in=1046 out=494 reasoning=0 schema_ok=True overall=2.5
+  tools +temp : OK  1.8s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  1.4s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-5-nano
+  json  +temp : ERR Error code: 400 - {'error': {'message': "Unsupported value: 'temperature' does not support 0.2 with this model
+  json  -temp : OK  9.5s in=1046 out=1340 reasoning=960 schema_ok=True overall=4.0
+  tools +temp : OK  3.3s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  2.4s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-4.1-nano
+  json  +temp : OK  3.2s in=1047 out=293 reasoning=0 schema_ok=True overall=3.5
+  json  -temp : OK  2.2s in=1047 out=281 reasoning=0 schema_ok=True overall=3.5
+  tools +temp : OK  1.0s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  1.0s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-4o-mini
+  json  +temp : OK  5.8s in=1047 out=318 reasoning=0 schema_ok=True overall=3.5
+  json  -temp : OK  4.1s in=1047 out=339 reasoning=0 schema_ok=True overall=3.5
+  tools +temp : OK  1.7s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  1.0s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-5.4-mini
+  json  +temp : OK  3.4s in=1046 out=413 reasoning=0 schema_ok=True overall=3.5
+  json  -temp : OK  3.3s in=1046 out=445 reasoning=0 schema_ok=True overall=3.5
+  tools +temp : OK  0.9s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  1.0s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-4.1
+  json  +temp : OK  2.9s in=1047 out=384 reasoning=0 schema_ok=True overall=3
+  json  -temp : OK  3.0s in=1047 out=391 reasoning=0 schema_ok=True overall=3
+  tools +temp : OK  1.1s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  0.8s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-4o
+  json  +temp : OK  3.1s in=1047 out=363 reasoning=0 schema_ok=True overall=3.5
+  json  -temp : OK  3.3s in=1047 out=351 reasoning=0 schema_ok=True overall=3.5
+  tools +temp : OK  1.3s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  0.8s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-5.4
+  json  +temp : OK  5.1s in=1046 out=506 reasoning=0 schema_ok=True overall=3.5
+  json  -temp : OK  4.8s in=1046 out=497 reasoning=0 schema_ok=True overall=3.5
+  tools +temp : OK  1.0s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  0.9s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+=== gpt-5.5
+  json  +temp : ERR Error code: 400 - {'error': {'message': "Unsupported value: 'temperature' does not support 0.2 with this model
+  json  -temp : OK  8.3s in=1046 out=580 reasoning=112 schema_ok=True overall=4
+  tools +temp : OK  1.6s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]
+  tools -temp : OK  1.6s tool_calls=[('check_availability', {'from_date': '2026-10-05', 'to_date': '2026-10-07'})]

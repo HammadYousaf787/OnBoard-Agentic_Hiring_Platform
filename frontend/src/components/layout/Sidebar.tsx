@@ -57,7 +57,7 @@ export function Sidebar({
         {!compact && (
           <div>
             <p className="text-sm font-semibold text-foreground leading-tight">
-              Onboard<span className="text-primary">HQ</span>
+              On<span className="text-primary">Board</span>
             </p>
             <p className="text-[11px] text-muted leading-tight">Admin Console</p>
           </div>
@@ -132,7 +132,9 @@ export function Sidebar({
     <>
       <aside
         className={clsx(
-          "relative hidden shrink-0 border-r border-border transition-[width] duration-200 lg:sticky lg:top-0 lg:block lg:h-screen lg:self-start",
+          // z-40: the AI-usage modal lives inside this aside; without its own z-index the sticky
+          // aside is a low stacking context and page content (e.g. the applicant board) paints over the modal.
+          "relative z-40 hidden shrink-0 border-r border-border transition-[width] duration-200 lg:sticky lg:top-0 lg:block lg:h-screen lg:self-start",
           collapsed ? "lg:w-[4.5rem]" : "lg:w-64"
         )}
       >

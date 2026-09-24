@@ -12,7 +12,7 @@ function formatTokens(n: number): string {
 }
 
 /**
- * Admin-only usage meter for the AI Job Review pipeline (Gemini calls).
+ * Admin-only usage meter for the AI Job Review pipeline (OpenAI calls).
  * Pulled from GET /ai-usage/summary, which the context re-fetches after
  * every AI review run in the current session -- other sessions' usage
  * still shows up next time this admin's data reloads (login/navigation),
@@ -52,7 +52,7 @@ export function AiUsageMeter({ compact = false }: { compact?: boolean }) {
         open={open}
         onClose={() => setOpen(false)}
         title="AI usage"
-        subtitle="Gemini API calls made by the AI Job Review pipeline"
+        subtitle="OpenAI calls made by this app, plus the account-wide usage below"
         width="md"
       >
         <div className="mb-5 grid grid-cols-3 gap-3">
@@ -91,8 +91,49 @@ export function AiUsageMeter({ compact = false }: { compact?: boolean }) {
           </div>
         </div>
 
+        <div className="mb-5 rounded-lg border border-border p-3">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+            OpenAI account usage (last 7 days, via OpenAI&apos;s Admin API)
+          </p>
+          {aiUsage.openaiAccount.configured ? (
+            aiUsage.openaiAccount.error ? (
+              <p className="text-xs text-danger">{aiUsage.openaiAccount.error}</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {aiUsage.openaiAccount.totalRequests?.toLocaleString() ?? "—"}
+                  </p>
+                  <p className="text-xs text-muted">Requests</p>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {aiUsage.openaiAccount.inputTokens !== undefined
+                      ? formatTokens(aiUsage.openaiAccount.inputTokens)
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-muted">Input tokens</p>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {aiUsage.openaiAccount.outputTokens !== undefined
+                      ? formatTokens(aiUsage.openaiAccount.outputTokens)
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-muted">Output tokens</p>
+                </div>
+              </div>
+            )
+          ) : (
+            <p className="text-xs text-muted">
+              Not configured -- set OPENAI_ADMIN_API_KEY on the backend to show real
+              account usage here.
+            </p>
+          )}
+        </div>
+
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
-          Recent calls
+          Recent calls (this app&apos;s own log)
         </p>
         {aiUsage.recentEvents.length === 0 ? (
           <p className="text-sm text-muted">No AI calls yet.</p>

@@ -29,9 +29,28 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:3000"
     apply_portal_origin: str = "http://localhost:3001"
 
-    # AI review pipeline
-    gemini_api_key: str | None = None
-    gemini_model: str = "gemini-flash-latest"
+    # AI review pipeline (applicant review, interview questions, live assist,
+    # and the HR assistant agent all use this one OpenAI account)
+    openai_api_key: str | None = None
+    # One model per task (chosen from a measured probe -- see MODEL_PROBE.txt).
+    # Scoring and interview prep are cheap structured-JSON jobs -> nano;
+    # the chatbot does multi-step tool calling -> a bigger model.
+    openai_model_scoring: str = "gpt-5.4-nano"
+    openai_model_interview_prep: str = "gpt-5.4-nano"
+    openai_model_live_assist: str = "gpt-5.4-nano"
+    openai_model_assistant: str = "gpt-5.4"
+    # Speech-to-text for the assistant's mic button (audio -> text, then the
+    # text goes through the normal chat model above).
+    openai_model_transcribe: str = "gpt-4o-mini-transcribe"
+    # Live interview: speech-to-text of both speakers' audio, and the model that
+    # judges each answered question (a judgement task -> mini rather than nano).
+    openai_model_interview_transcribe: str = "gpt-4o-mini-transcribe"
+    openai_model_qa_analysis: str = "gpt-5.4-mini"
+    # Separate Admin API key (org-level, "api.usage.read" scope) used only to
+    # show real account usage on the admin AI usage panel -- optional, and
+    # distinct from openai_api_key, which is what actually makes AI calls.
+    openai_admin_api_key: str | None = None
+    openai_org_id: str | None = None
     github_token: str | None = None
     brightdata_api_token: str | None = None
 

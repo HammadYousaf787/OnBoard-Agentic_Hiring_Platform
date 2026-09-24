@@ -75,7 +75,7 @@ export interface AiReviewCategory {
   reasoning: string;
 }
 
-/** Present only after the AI Job Review (Gemini + GitHub + LinkedIn)
+/** Present only after the AI Job Review (OpenAI + GitHub + LinkedIn)
  * has run for this applicant. */
 export interface AiReviewDetails {
   communication: AiReviewCategory;
@@ -152,6 +152,8 @@ export interface Appointment {
   roomStartedAt?: string;
   roomEndedAt?: string;
   recordingEnabled: boolean;
+  /** Live AI assistance; can only be switched on before the call starts. */
+  aiAssistEnabled: boolean;
   interviewerNotes?: string;
   interviewerReview?: string;
   interviewerReviewedAt?: string;
@@ -170,6 +172,19 @@ export interface TranscriptSegment {
   speakerName: string;
   text: string;
   spokenAt: string;
+}
+
+/** AI evaluation of one question the interviewer asked and the candidate answered. */
+export interface LiveInsight {
+  id: number;
+  questionSegmentId: number;
+  question: string;
+  answerSummary: string;
+  depth: "shallow" | "adequate" | "strong";
+  shouldProbe: boolean;
+  recommendation: string;
+  followUps: string[];
+  createdAt: string;
 }
 
 export interface RtcCredentials {
@@ -236,6 +251,19 @@ export interface AiUsageSummary {
   totalCompletionTokens: number;
   byProvider: Record<string, number>;
   recentEvents: AiUsageEvent[];
+  openaiAccount: OpenAiAccountUsage;
+}
+
+/** Real account-level usage pulled from OpenAI's own Admin API (separate from
+ * the recentEvents log above, which is this app's own record of its calls). */
+export interface OpenAiAccountUsage {
+  configured: boolean;
+  periodStart?: string;
+  periodEnd?: string;
+  totalRequests?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  error?: string;
 }
 
 export interface AppData {

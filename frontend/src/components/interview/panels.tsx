@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAppData } from "@/context/AppDataContext";
 import * as api from "@/lib/api";
-import { Applicant, Appointment, Job, LiveAssist } from "@/lib/types";
+import { Applicant, Appointment, Job, LiveAssist, LiveInsight } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
 import { StarRating } from "@/components/ui/StarRating";
@@ -297,108 +297,142 @@ export function NotesPanel({
 // Live AI assistance
 // ---------------------------------------------------------------------------
 
+const DEPTH_STYLE: Record<LiveInsight["depth"], { label: string; cls: string }> = {
+  shallow: { label: "Shallow answer", cls: "bg-amber-100 text-amber-800" },
+  adequate: { label: "Adequate", cls: "bg-gray-100 text-gray-700" },
+  strong: { label: "Strong answer", cls: "bg-emerald-100 text-emerald-800" },
+};
+
+/**
+ * Live AI assistance. The backend transcribes both voices and, in the background,
+ * evaluates each question the interviewer asked once the candidate has answered it;
+ * the room page polls those evaluations and passes them in. Whether assistance is on
+ * was decided BEFORE the call (the candidate is warned) and can't be enabled later.
+ */
 export function LiveAssistPanel({
   appointmentId,
   live,
-  segmentCount,
+  aiAssistEnabled,
+  insights,
 }: {
   appointmentId: string;
   live: boolean;
-  segmentCount: number;
+  aiAssistEnabled: boolean;
+  insights: LiveInsight[];
 }) {
-  const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<LiveAssist | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const lastCount = useRef(-1);
-  const inFlight = useRef(false);
-  const countRef = useRef(segmentCount);
-  useEffect(() => {
-    countRef.current = segmentCount;
-  });
 
-  async function run(force = false) {
-    if (inFlight.current) return;
-    if (!force && countRef.current === lastCount.current) return;
-    inFlight.current = true;
+  async function suggestNext() {
     setBusy(true);
     setError(null);
-    lastCount.current = countRef.current;
     try {
       setResult(await api.apiLiveAssist(appointmentId));
     } catch (err) {
       setError(errorText(err));
     } finally {
-      inFlight.current = false;
       setBusy(false);
     }
   }
 
-  const runRef = useRef(run);
-  useEffect(() => {
-    runRef.current = run;
-  });
-
-  useEffect(() => {
-    if (!enabled || !live) return;
-    void runRef.current();
-    const timer = window.setInterval(() => void runRef.current(), 25000);
-    return () => window.clearInterval(timer);
-  }, [enabled, live]);
+  const newestFirst = [...insights].reverse();
 
   return (
     <div className="space-y-4 text-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div>
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-medium uppercase tracking-wide text-muted">Live AI assistance</p>
-          <p className="mt-1 text-xs text-muted">
-            Reads the live transcript (both speakers) and recommends what to ask next. Each refresh
-            is a metered AI call, at most every ~25 seconds and only when there is new speech.
-          </p>
-        </div>
-        <button
-          role="switch"
-          aria-checked={enabled}
-          aria-label="Turn live AI assistance on"
-          disabled={!live}
-          onClick={() => setEnabled((v) => !v)}
-          className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
-            enabled ? "bg-primary" : "bg-gray-300"
-          }`}
-        >
           <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
-              enabled ? "left-[22px]" : "left-0.5"
+            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+              aiAssistEnabled ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-600"
             }`}
-          />
-        </button>
+          >
+            {aiAssistEnabled ? "On" : "Off"}
+          </span>
+        </div>
+        {aiAssistEnabled ? (
+          <p className="mt-1 text-xs text-muted">
+            Both voices are transcribed and, whenever you ask a question and the candidate finishes
+            answering it, the AI judges whether it&apos;s worth going deeper. Evaluations appear here
+            on their own (usually a few seconds after the answer ends).
+          </p>
+        ) : (
+          <p className="mt-1 rounded-lg bg-gray-50 px-3 py-2 text-xs text-muted">
+            AI assistance is off for this interview. It can only be turned on before the call
+            starts (the candidate has to be told first) — tick it on the start screen.
+          </p>
+        )}
       </div>
 
-      {!live && <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-muted">Available once the room is live.</p>}
+      {(aiAssistEnabled || insights.length > 0) && live && (
+        <>
+          {newestFirst.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted">
+              No answered questions yet. Ask a question — an evaluation shows up after the candidate
+              answers.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {newestFirst.map((i) => (
+                <li
+                  key={i.id}
+                  className={`rounded-lg border px-3 py-3 ${
+                    i.shouldProbe ? "border-primary/40 bg-primary-soft/40" : "border-border bg-white"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${DEPTH_STYLE[i.depth].cls}`}>
+                      {DEPTH_STYLE[i.depth].label}
+                    </span>
+                    <span className="text-[11px] font-medium text-primary">
+                      {i.shouldProbe ? "Worth going deeper" : "Covered — move on"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">You asked</p>
+                  <p className="text-sm font-medium text-foreground">{i.question}</p>
+                  <p className="mt-2 text-xs text-muted">They said</p>
+                  <p className="text-xs text-foreground">{i.answerSummary}</p>
+                  <p className="mt-2 text-xs text-foreground">{i.recommendation}</p>
+                  {i.followUps.length > 0 && (
+                    <ul className="mt-2 space-y-1.5">
+                      {i.followUps.map((f, idx) => (
+                        <li key={idx} className="rounded-md bg-white px-2.5 py-1.5 text-sm text-foreground shadow-sm">
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
 
-      {enabled && live && (
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => void run(true)} disabled={busy}>
-            <Zap className="h-3.5 w-3.5" /> Suggest now
-          </Button>
-          {busy && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-        </div>
-      )}
-
-      {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">{error}</p>}
-
-      {result && (
-        <div className="space-y-3">
-          <p className="rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-muted">{result.observation}</p>
-          <ul className="space-y-2">
-            {result.suggestions.map((s, i) => (
-              <li key={i} className="rounded-lg border border-primary/30 bg-primary-soft/40 px-3 py-2.5">
-                <p className="text-sm font-medium text-foreground">{s.question}</p>
-                <p className="mt-1 text-xs text-muted">{s.reason}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
+          {aiAssistEnabled && (
+          <div className="border-t border-border pt-3">
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" onClick={() => void suggestNext()} disabled={busy}>
+                <Zap className="h-3.5 w-3.5" /> Suggest a new topic
+              </Button>
+              {busy && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            </div>
+            {error && <p className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">{error}</p>}
+            {result && (
+              <div className="mt-3 space-y-2">
+                <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-muted">{result.observation}</p>
+                <ul className="space-y-2">
+                  {result.suggestions.map((sg, idx) => (
+                    <li key={idx} className="rounded-lg border border-border px-3 py-2">
+                      <p className="text-sm font-medium text-foreground">{sg.question}</p>
+                      <p className="mt-1 text-xs text-muted">{sg.reason}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          )}
+        </>
       )}
     </div>
   );

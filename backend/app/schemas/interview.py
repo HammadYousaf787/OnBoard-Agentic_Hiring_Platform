@@ -22,10 +22,16 @@ class AiQuestionsInput(BaseModel):
 
 class StartRoomInput(BaseModel):
     recording_enabled: bool = False
+    # Chosen before the call starts; cannot be switched on afterwards.
+    ai_assist_enabled: bool = False
 
 
 class RoomSettingsInput(BaseModel):
-    recording_enabled: bool
+    """Only the fields present are changed. ai_assist_enabled may only be
+    turned ON while the interview hasn't started (turning it off is always OK)."""
+
+    recording_enabled: bool | None = None
+    ai_assist_enabled: bool | None = None
 
 
 class SegmentInput(BaseModel):
@@ -60,6 +66,18 @@ class LiveAssistRead(BaseModel):
     suggestions: list[LiveSuggestion]
 
 
+class InsightRead(BaseModel):
+    id: int
+    question_segment_id: int
+    question: str
+    answer_summary: str
+    depth: str  # shallow | adequate | strong
+    should_probe: bool
+    recommendation: str
+    follow_ups: list[str]
+    created_at: datetime
+
+
 class FinalTranscriptRead(BaseModel):
     appointment_id: uuid.UUID
     segments: list[dict]
@@ -72,3 +90,4 @@ class PublicInterviewState(BaseModel):
     scheduled_at: datetime
     room_status: str
     recording_enabled: bool
+    ai_assist_enabled: bool = False

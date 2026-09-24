@@ -47,7 +47,7 @@ class ApplicantRead(BaseModel):
     overall_score: float | None
     ranked_at: datetime | None
 
-    # Present only after the real AI Job Review (Gemini + GitHub + LinkedIn)
+    # Present only after the real AI Job Review (OpenAI + GitHub + LinkedIn)
     # has run for this applicant; holds per-category reasoning text.
     ai_review_details: dict | None = None
     manual_rank: int | None = None

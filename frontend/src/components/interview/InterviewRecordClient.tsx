@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Video } from "lucide-react";
 import { useAppData } from "@/context/AppDataContext";
 import * as api from "@/lib/api";
-import { Appointment } from "@/lib/types";
+import { Appointment, LiveInsight } from "@/lib/types";
 import { interviewsFor } from "@/lib/interviews";
 import { Card, CardBody, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -51,7 +51,20 @@ export function InterviewRecordClient({
   const [transcript, setTranscript] = useState<TranscriptLine[] | null>(null);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [insights, setInsights] = useState<LiveInsight[]>([]);
   const router = useRouter();
+
+  // Per-question AI evaluations saved during the call (only exist if AI assistance was on).
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .apiListInsights(appointmentId, 0)
+      .then((list) => !cancelled && setInsights(list))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [appointmentId]);
 
   const applicant = applicants.find((a) => a.id === applicantId);
   const job = jobs.find((j) => j.id === jobId);
@@ -270,6 +283,41 @@ export function InterviewRecordClient({
               )}
             </CardBody>
           </Card>
+
+          {appt.aiAssistEnabled && (
+            <Card>
+              <CardHeader
+                title="AI question insights"
+                subtitle="Each answered question, and whether it was worth going deeper"
+              />
+              <CardBody>
+                {insights.length === 0 ? (
+                  <p className="text-sm text-muted">No answered questions were evaluated.</p>
+                ) : (
+                  <ul className="max-h-96 space-y-3 overflow-y-auto">
+                    {insights.map((i) => (
+                      <li key={i.id} className="rounded-lg border border-border px-3 py-2.5 text-sm">
+                        <p className="font-medium text-foreground">{i.question}</p>
+                        <p className="mt-1 text-xs text-muted">{i.answerSummary}</p>
+                        <p className="mt-1.5 text-xs text-foreground">
+                          <span className="font-medium capitalize">{i.depth}</span>
+                          {i.shouldProbe ? " · worth going deeper: " : " · "}
+                          {i.recommendation}
+                        </p>
+                        {i.followUps.length > 0 && (
+                          <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs text-foreground">
+                            {i.followUps.map((f, idx) => (
+                              <li key={idx}>{f}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardBody>
+            </Card>
+          )}
 
           <Card>
             <CardHeader title="Details" />

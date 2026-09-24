@@ -383,7 +383,7 @@ export function JobApplicantsBoard({
                 description="New applications to this position appear here."
               />
             ) : (
-              <ul className="max-h-[42rem] divide-y divide-border overflow-y-auto">
+              <ul className="max-h-[30rem] divide-y divide-border overflow-y-auto">
                 {applicantList.map((applicant, index) => {
                   const ai = aiScoreOf(applicant);
                   return (
@@ -532,7 +532,7 @@ export function JobApplicantsBoard({
               detailBasePath={detailBasePath}
               onViewCv={setCvApplicant}
               decisionLabel="Accepted"
-              listMaxHeight="max-h-[18rem]"
+              listMaxHeight="max-h-[14rem]"
             />
           </PanelShell>
           <PanelShell arrow="danger">
@@ -543,7 +543,7 @@ export function JobApplicantsBoard({
               detailBasePath={detailBasePath}
               onViewCv={setCvApplicant}
               decisionLabel="Rejected"
-              listMaxHeight="max-h-[18rem]"
+              listMaxHeight="max-h-[14rem]"
             />
           </PanelShell>
         </div>
@@ -604,7 +604,7 @@ function SidePanel({
   onSchedule,
   headerAction,
   decisionLabel,
-  listMaxHeight = "max-h-[38rem]",
+  listMaxHeight = "max-h-[30rem]",
   selection,
 }: {
   title: string;

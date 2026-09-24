@@ -29,7 +29,7 @@ async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     return user
 
 
-@router.get("/users", response_model=list[UserRead])
+@router.get("/users", response_model=list[UserWithHistory])
 async def list_users(
     role: Role | None = None,
     status_filter: AccountStatus | None = None,

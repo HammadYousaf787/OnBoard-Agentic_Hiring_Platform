@@ -8,7 +8,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Apply — OnboardHQ",
+  title: "Apply — OnBoard",
   description: "Submit your application.",
 };
 

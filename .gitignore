@@ -7,3 +7,10 @@ Thumbs.db
 # Each subproject manages its own ignores:
 #   frontend/.gitignore  - Next.js (node_modules, .next, .env*, etc.)
 #   backend/.gitignore   - Python (.venv, __pycache__, .env, etc.)
+
+# Local-only: recorded product videos and the working to-do list
+presentation/videos/
+TODO.txt
+presentation/assets/avatars/
+presentation/assets/voice/
+presentation/assets/cvs/*.pdf

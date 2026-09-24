@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -15,14 +15,15 @@ from starlette.concurrency import run_in_threadpool
 from app.config import get_settings
 from app.core.agora import INTERVIEWER_UID, AgoraNotConfigured, build_rtc_credentials, channel_for
 from app.core.applicant_context import gather_online_profiles
+from app.core.live_interview import forget, ingest_audio
 from app.core.storage import delete_prefix, get_bytes, get_cv_download_url, put_bytes, put_file
 from app.database import get_db
 from app.deps import require_any_role, require_hr
-from app.integrations.gemini_client import GeminiError
+from app.integrations.openai_client import AiProviderError, model_for
 from app.integrations.interview_ai import generate_interview_questions, generate_live_suggestions
 from app.models.ai_usage import AiUsageEvent
 from app.models.applicant import Applicant
-from app.models.appointment import Appointment, InterviewSegment
+from app.models.appointment import Appointment, InterviewInsight, InterviewSegment
 from app.models.job import Job
 from app.models.user import User
 from app.models.enums import ApplicantStage, Role
@@ -31,6 +32,7 @@ from app.schemas.appointment import AppointmentRead
 from app.schemas.interview import (
     AiQuestionsInput,
     FinalTranscriptRead,
+    InsightRead,
     LiveAssistRead,
     NotesInput,
     ReviewInput,
@@ -195,8 +197,8 @@ async def _log_usage(
 ) -> None:
     db.add(
         AiUsageEvent(
-            provider="gemini",
-            model_name=get_settings().gemini_model,
+            provider="openai",
+            model_name=model_for(purpose),
             purpose=purpose,
             applicant_id=applicant_id,
             triggered_by_id=user_id,
@@ -229,7 +231,7 @@ async def generate_questions(
 
     try:
         result, usage = await generate_interview_questions(job, applicant, github, linkedin, payload.prompt)
-    except GeminiError as exc:
+    except AiProviderError as exc:
         await _log_usage(db, "interview_questions", applicant.id, current_user.id, None, str(exc))
         await db.commit()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI request failed: {exc}")
@@ -257,6 +259,9 @@ async def start_room(
     if appointment.room_status != "live":
         appointment.room_status = "live"
         appointment.room_started_at = datetime.now(timezone.utc)
+        # Chosen once, before the call: it can't be switched on later (the candidate
+        # is warned on the join screen), only off.
+        appointment.ai_assist_enabled = payload.ai_assist_enabled
     appointment.recording_enabled = payload.recording_enabled
     await db.commit()
     await db.refresh(appointment)
@@ -271,7 +276,15 @@ async def update_room_settings(
     current_user: User = Depends(require_hr),
 ) -> Appointment:
     appointment = await get_own_appointment(db, appointment_id, current_user)
-    appointment.recording_enabled = payload.recording_enabled
+    if payload.ai_assist_enabled and appointment.room_status in ("live", "ended"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI assistance can only be turned on before the interview starts.",
+        )
+    if payload.recording_enabled is not None:
+        appointment.recording_enabled = payload.recording_enabled
+    if payload.ai_assist_enabled is not None:
+        appointment.ai_assist_enabled = payload.ai_assist_enabled
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -331,6 +344,63 @@ async def list_segments(
     return list(result.scalars().all())
 
 
+@router.post("/{appointment_id}/audio", response_model=SegmentRead | None)
+async def upload_audio_chunk(
+    appointment_id: uuid.UUID,
+    audio: UploadFile = File(...),
+    duration_ms: int = Form(0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_hr),
+) -> InterviewSegment | None:
+    """The interviewer's browser uploads short clips of ITS OWN microphone while
+    AI assistance is on; each is transcribed and stored as a transcript line
+    (see app/core/live_interview.py). Null when the clip held no usable speech."""
+    appointment = await get_own_appointment(db, appointment_id, current_user)
+    return await ingest_audio(
+        db,
+        appointment,
+        role="interviewer",
+        speaker_name=current_user.full_name,
+        data=await audio.read(),
+        filename=audio.filename or "clip.webm",
+        content_type=audio.content_type,
+        duration_ms=duration_ms,
+    )
+
+
+@router.get("/{appointment_id}/insights", response_model=list[InsightRead])
+async def list_insights(
+    appointment_id: uuid.UUID,
+    after: int = 0,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_any_role),
+) -> list[InsightRead]:
+    """Per-question AI evaluations (question asked -> answered -> should the
+    interviewer go deeper). Polled by the room page; kept after the call."""
+    appointment = await get_viewable_appointment(db, appointment_id, current_user)
+    rows = (
+        await db.execute(
+            select(InterviewInsight)
+            .where(InterviewInsight.appointment_id == appointment.id, InterviewInsight.id > after)
+            .order_by(InterviewInsight.id)
+        )
+    ).scalars().all()
+    return [
+        InsightRead(
+            id=r.id,
+            question_segment_id=r.question_segment_id,
+            question=r.question,
+            answer_summary=r.data.get("answer_summary", ""),
+            depth=r.data.get("depth", "adequate"),
+            should_probe=bool(r.data.get("should_probe")),
+            recommendation=r.data.get("recommendation", ""),
+            follow_ups=list(r.data.get("follow_ups", [])),
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
 @router.post("/{appointment_id}/live-assist", response_model=LiveAssistRead)
 async def live_assist(
     appointment_id: uuid.UUID,
@@ -340,6 +410,11 @@ async def live_assist(
     appointment = await get_own_appointment(db, appointment_id, current_user)
     if appointment.room_status != "live":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="The interview is not live.")
+    if not appointment.ai_assist_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI assistance wasn't enabled before this interview started.",
+        )
 
     now = time.monotonic()
     if now - _last_live_assist.get(appointment.id, 0) < 8:
@@ -359,7 +434,7 @@ async def live_assist(
 
     try:
         data, usage = await generate_live_suggestions(job, applicant, lines, topics)
-    except GeminiError as exc:
+    except AiProviderError as exc:
         await _log_usage(db, "interview_live_assist", applicant.id, current_user.id, None, str(exc))
         await db.commit()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"AI request failed: {exc}")
@@ -421,7 +496,7 @@ async def end_room(
     result = await db.execute(
         select(InterviewSegment)
         .where(InterviewSegment.appointment_id == appointment.id)
-        .order_by(InterviewSegment.id)
+        .order_by(InterviewSegment.spoken_at, InterviewSegment.id)
     )
     segments = list(result.scalars().all())
     started = appointment.room_started_at or (segments[0].spoken_at if segments else None)
@@ -454,6 +529,7 @@ async def end_room(
     appointment.room_ended_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(appointment)
+    forget(appointment.id)
     return appointment
 
 

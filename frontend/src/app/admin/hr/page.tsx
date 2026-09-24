@@ -61,9 +61,9 @@ export default function HrPanelPage() {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[32rem] overflow-auto">
               <table className="w-full text-left text-sm">
-                <thead>
+                <thead className="sticky top-0 bg-surface">
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
                     <th className="px-5 py-3 font-medium">HR Member</th>
                     <th className="px-5 py-3 font-medium">Contact</th>

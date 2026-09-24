@@ -34,6 +34,10 @@ class Appointment(Base):
     room_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     room_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     recording_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Live AI assistance: both sides' audio is sent to OpenAI for transcription and the
+    # transcript is analysed question-by-question. Can only be switched ON before the
+    # call starts (the candidate is warned on the join screen); it can be switched off.
+    ai_assist_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     interviewer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Written by the interviewer when the interview ends (or edited later).
@@ -81,3 +85,24 @@ class InterviewSegment(Base):
     speaker_name: Mapped[str] = mapped_column(String(150), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     spoken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class InterviewInsight(Base):
+    """AI evaluation of ONE question the interviewer asked and the candidate
+    answered, produced while the interview is live (app/core/live_interview.py).
+    Kept after the call ends -- it references the question text, not the
+    (temporary) segment row."""
+
+    __tablename__ = "interview_insights"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Id of the interviewer segment that held the question (no FK: segments are
+    # deleted when the interview ends).
+    question_segment_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    # answer_summary, depth, should_probe, recommendation, follow_ups
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -113,7 +113,7 @@ export default function HrDashboardPage() {
             {upcoming.length === 0 ? (
               <EmptyState icon={CalendarClock} title="No upcoming interviews" />
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="max-h-80 divide-y divide-border overflow-y-auto">
                 {upcoming.slice(0, 5).map((appt) => {
                   const applicant = applicants.find((a) => a.id === appt.applicantId);
                   const job = jobs.find((j) => j.id === appt.jobId);
@@ -147,7 +147,7 @@ export default function HrDashboardPage() {
             {pendingScheduling.length === 0 ? (
               <EmptyState icon={ClipboardList} title="Nothing waiting on you" />
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="max-h-80 divide-y divide-border overflow-y-auto">
                 {pendingScheduling.slice(0, 5).map((applicant) => {
                   const job = jobs.find((j) => j.id === applicant.jobId);
                   return (

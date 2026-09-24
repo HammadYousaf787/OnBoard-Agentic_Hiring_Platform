@@ -127,7 +127,7 @@ export default function AdminDashboardPage() {
                 description="Accepted and rejected candidates will show up here."
               />
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="max-h-96 divide-y divide-border overflow-y-auto">
                 {recentDecisions.map((a) => {
                   const job = jobs.find((j) => j.id === a.jobId);
                   const hr = users.find((u) => u.id === job?.assignedHrId);
@@ -189,7 +189,7 @@ export default function AdminDashboardPage() {
                 description="Approval and account actions will show up here."
               />
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="max-h-96 divide-y divide-border overflow-y-auto">
                 {recentEvents.map((event) => (
                   <li key={event.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
                     <div>
@@ -222,7 +222,7 @@ export default function AdminDashboardPage() {
             {jobs.length === 0 ? (
               <EmptyState icon={Briefcase} title="No jobs yet" />
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="max-h-96 divide-y divide-border overflow-y-auto">
                 {jobs.slice(0, 5).map((job) => {
                   const hr = users.find((u) => u.id === job.assignedHrId);
                   return (

@@ -1,6 +1,18 @@
+import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
+if sys.platform == "win32":
+    # psycopg (v3), used by the LangGraph assistant's checkpointer, can't run
+    # async on Windows' default ProactorEventLoop. This line only helps when
+    # app.main is imported before any event loop exists (e.g. tests) --
+    # `python -m uvicorn app.main:app` creates its loop via asyncio.run()
+    # *before* importing this module, so that launch path is too late for
+    # this to help. Run the API with `python run.py` instead (sets the
+    # policy first, then starts uvicorn) -- see that file for detail.
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
@@ -8,6 +20,7 @@ from app.core.storage import ensure_bucket_exists
 from app.routers import (
     ai_review,
     applicants,
+    assistant,
     auth,
     cv_bank,
     interviews,
@@ -51,6 +64,7 @@ app.include_router(ai_review.router)
 app.include_router(public.router)
 app.include_router(interviews.router)
 app.include_router(public_interviews.router)
+app.include_router(assistant.router)
 
 
 @app.get("/health", tags=["health"])

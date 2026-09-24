@@ -3,6 +3,7 @@
 import { ReactNode, useState } from "react";
 import { Menu } from "lucide-react";
 import { HrSidebar } from "./HrSidebar";
+import { AssistantPanel } from "@/components/shared/AssistantPanel";
 import { useAppData } from "@/context/AppDataContext";
 
 export function HrShell({ children }: { children: ReactNode }) {
@@ -40,6 +41,7 @@ export function HrShell({ children }: { children: ReactNode }) {
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
+      <AssistantPanel />
     </div>
   );
 }

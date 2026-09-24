@@ -52,7 +52,7 @@ export default function SchedulingPage() {
               description="No candidates are currently waiting to be scheduled."
             />
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="max-h-96 divide-y divide-border overflow-y-auto">
               {pending.map((applicant) => {
                 const job = jobFor(applicant.jobId);
                 return (

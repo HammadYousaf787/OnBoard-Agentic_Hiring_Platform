@@ -13,7 +13,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   linkedin: "LinkedIn activity & relevance",
 };
 
-/** Shows the AI Job Review: scores plus Gemini's written reasoning for each. Recommendation only. */
+/** Shows the AI Job Review: scores plus the model's written reasoning for each. Recommendation only. */
 export function AiJobReviewCard({
   applicant,
   rank,
@@ -31,7 +31,7 @@ export function AiJobReviewCard({
         title="AI Job Review"
         subtitle={
           review
-            ? `Powered by Gemini (${review.model}) — a recommendation only`
+            ? `Powered by ${review.model} — a recommendation only`
             : "Real evaluation using GitHub, LinkedIn, and CV/cover letter vs. the job description"
         }
         action={action}

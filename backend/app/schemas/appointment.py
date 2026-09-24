@@ -19,6 +19,7 @@ class AppointmentRead(BaseModel):
     room_started_at: datetime | None = None
     room_ended_at: datetime | None = None
     recording_enabled: bool = False
+    ai_assist_enabled: bool = False
     interviewer_notes: str | None = None
     interviewer_review: str | None = None
     interviewer_reviewed_at: datetime | None = None

@@ -46,7 +46,7 @@ export default function CvBankPage() {
               description="Candidates you save when rejecting an application will appear here."
             />
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="max-h-96 divide-y divide-border overflow-y-auto">
               {sorted.map((entry) => (
                 <li key={entry.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
                   <div>

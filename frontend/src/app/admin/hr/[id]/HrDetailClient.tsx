@@ -139,7 +139,7 @@ export function HrDetailClient({ hrId }: { hrId: string }) {
               {history.length === 0 ? (
                 <EmptyState icon={ShieldCheck} title="No history recorded" />
               ) : (
-                <ul className="divide-y divide-border">
+                <ul className="max-h-96 divide-y divide-border overflow-y-auto">
                   {history.map((event) => {
                     const meta = actionMeta[event.action];
                     const Icon = meta.icon;
@@ -198,7 +198,7 @@ export function HrDetailClient({ hrId }: { hrId: string }) {
                   description="Assign this HR member to a job from the Jobs panel."
                 />
               ) : (
-                <ul className="divide-y divide-border">
+                <ul className="max-h-96 divide-y divide-border overflow-y-auto">
                   {assignedJobs.map((job) => (
                     <li key={job.id} className="flex items-center justify-between gap-3 px-5 py-4">
                       <div>

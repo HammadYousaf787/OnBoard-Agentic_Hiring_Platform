@@ -1,10 +1,11 @@
 """Applicant-side (no login) endpoints for joining a video interview via the
 secret link containing the appointment's room token."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.live_interview import ingest_audio
 from app.core.agora import APPLICANT_UID, AgoraNotConfigured, build_rtc_credentials, channel_for
 from app.database import get_db
 from app.models.applicant import Applicant
@@ -37,6 +38,7 @@ async def get_state(token: str, db: AsyncSession = Depends(get_db)) -> PublicInt
         scheduled_at=appointment.scheduled_at,
         room_status=appointment.room_status,
         recording_enabled=appointment.recording_enabled,
+        ai_assist_enabled=appointment.ai_assist_enabled,
     )
 
 
@@ -73,3 +75,27 @@ async def add_segment(
     await db.commit()
     await db.refresh(segment)
     return segment
+
+
+@router.post("/{token}/audio", response_model=SegmentRead | None)
+async def upload_audio_chunk(
+    token: str,
+    audio: UploadFile = File(...),
+    duration_ms: int = Form(0),
+    db: AsyncSession = Depends(get_db),
+) -> InterviewSegment | None:
+    """The candidate's browser uploads short clips of its own microphone while
+    AI assistance is on (the join screen tells them). Same pipeline as the
+    interviewer's -- see app/core/live_interview.py."""
+    appointment = await _by_token(db, token)
+    applicant = await db.get(Applicant, appointment.applicant_id)
+    return await ingest_audio(
+        db,
+        appointment,
+        role="applicant",
+        speaker_name=applicant.name if applicant else "Candidate",
+        data=await audio.read(),
+        filename=audio.filename or "clip.webm",
+        content_type=audio.content_type,
+        duration_ms=duration_ms,
+    )

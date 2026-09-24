@@ -7,6 +7,8 @@ export interface InterviewState {
   scheduled_at: string;
   room_status: "not_setup" | "ready" | "live" | "ended";
   recording_enabled: boolean;
+  /** Live AI assistance: the candidate's voice is transcribed and analysed by AI. */
+  ai_assist_enabled: boolean;
 }
 
 export interface RtcCredentials {
@@ -59,4 +61,16 @@ export async function postSegment(token: string, text: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   }).catch(() => {});
+}
+
+/** The candidate's own-microphone clip -> backend -> OpenAI transcription -> transcript line. */
+export async function uploadAudioClip(token: string, clip: Blob, durationMs: number): Promise<void> {
+  const body = new FormData();
+  body.append("audio", clip, clip.type.includes("mp4") ? "clip.m4a" : "clip.webm");
+  body.append("duration_ms", String(durationMs));
+  const res = await fetch(`${API_BASE_URL}/public/interviews/${encodeURIComponent(token)}/audio`, {
+    method: "POST",
+    body,
+  });
+  if (!res.ok) throw new Error("Couldn't send audio for transcription.");
 }

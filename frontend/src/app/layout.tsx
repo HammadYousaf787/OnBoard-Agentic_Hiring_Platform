@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OnboardHQ — Employee Onboarding Platform",
+  title: "OnBoard — Employee Onboarding Platform",
   description: "Admin and HR platform for managing recruitment onboarding.",
 };
 

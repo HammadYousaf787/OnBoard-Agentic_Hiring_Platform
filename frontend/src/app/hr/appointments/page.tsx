@@ -114,11 +114,20 @@ export default function AppointmentsPage() {
     [myAppointments, now]
   );
 
+  // Lined-up: everything that hasn't been held yet, earliest first.
   const allInterviews = useMemo(
     () =>
-      [...myAppointments].sort(
-        (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
-      ),
+      myAppointments
+        .filter((a) => a.roomStatus !== "ended")
+        .sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()),
+    [myAppointments]
+  );
+  // Completed: interviews that took place, most recent first.
+  const completedInterviews = useMemo(
+    () =>
+      myAppointments
+        .filter((a) => a.roomStatus === "ended")
+        .sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()),
     [myAppointments]
   );
   // Only interviews whose room has not been set up can be selected for setup.
@@ -145,7 +154,7 @@ export default function AppointmentsPage() {
     const job = jobFor(appt.jobId);
     return (
       <li key={appt.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-        {rooms && (
+        {rooms && appt.roomStatus !== "ended" && (
         <input
           type="checkbox"
           aria-label={`Select interview with ${applicant?.name ?? "candidate"}`}
@@ -156,7 +165,7 @@ export default function AppointmentsPage() {
           className="h-4 w-4 shrink-0 cursor-pointer accent-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
         />
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[12rem] flex-1">
           <Link
             href={`/hr/jobs/${appt.jobId}/applicants/${appt.applicantId}`}
             className="text-sm font-medium text-foreground hover:text-primary"
@@ -169,6 +178,11 @@ export default function AppointmentsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
+          {rooms && appt.roomStatus !== "ended" && !isUpcoming(appt, now) && (
+            <Badge tone="amber" dot>
+              Time passed
+            </Badge>
+          )}
           {rooms && appt.roomStatus !== "not_setup" && (
             <Badge
               tone={appt.roomStatus === "live" ? "green" : appt.roomStatus === "ended" ? "gray" : "blue"}
@@ -306,7 +320,7 @@ export default function AppointmentsPage() {
               {agenda.length === 0 ? (
                 <EmptyState icon={CalendarDays} title="No interviews on this day" />
               ) : (
-                <ul className="divide-y divide-border">{agenda.map((a) => renderAppointmentRow(a))}</ul>
+                <ul className="max-h-80 divide-y divide-border overflow-y-auto">{agenda.map((a) => renderAppointmentRow(a))}</ul>
               )}
             </CardBody>
           </Card>
@@ -317,7 +331,7 @@ export default function AppointmentsPage() {
               {upcoming.length === 0 ? (
                 <EmptyState icon={CalendarClock} title="Nothing upcoming" />
               ) : (
-                <ul className="divide-y divide-border">{upcoming.map((a) => renderAppointmentRow(a))}</ul>
+                <ul className="max-h-80 divide-y divide-border overflow-y-auto">{upcoming.map((a) => renderAppointmentRow(a))}</ul>
               )}
             </CardBody>
           </Card>
@@ -344,7 +358,7 @@ export default function AppointmentsPage() {
       <Card className="mt-6">
         <CardHeader
           title={`Lined-up interviews (${allInterviews.length})`}
-          subtitle="Select interviews (or use each row's Set up room) to create their video rooms, then share each candidate's link"
+          subtitle="Yet to happen, earliest first. Select interviews (or use each row's Set up room) to create their video rooms, then share each candidate's link"
           action={
             selectableIds.length > 0 && (
               <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
@@ -364,8 +378,24 @@ export default function AppointmentsPage() {
           {allInterviews.length === 0 ? (
             <EmptyState icon={CalendarClock} title="No interviews lined up" />
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="max-h-[32rem] divide-y divide-border overflow-y-auto">
               {allInterviews.map((appt) => renderAppointmentRow(appt, true))}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader
+          title={`Completed interviews (${completedInterviews.length})`}
+          subtitle="Interviews that have taken place, most recent first"
+        />
+        <CardBody className="p-0">
+          {completedInterviews.length === 0 ? (
+            <EmptyState icon={CalendarDays} title="No completed interviews yet" />
+          ) : (
+            <ul className="max-h-[32rem] divide-y divide-border overflow-y-auto">
+              {completedInterviews.map((appt) => renderAppointmentRow(appt, true))}
             </ul>
           )}
         </CardBody>

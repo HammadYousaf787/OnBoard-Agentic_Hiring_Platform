@@ -1,12 +1,12 @@
 """
-Gemini prompts for the video-interview feature: (1) a set of natural,
+OpenAI prompts for the video-interview feature: (1) a set of natural,
 personalised interview questions prepared before the call, and (2) live
 suggestions based on the running transcript.
 """
 
 import json
 
-from app.integrations.gemini_client import generate_json
+from app.integrations.openai_client import generate_json
 from app.models.applicant import Applicant
 from app.models.job import Job
 
@@ -125,7 +125,7 @@ Using ONLY the material below, prepare questions to ask.
 {_profile_section("LinkedIn", *linkedin)}
 
 Respond with ONLY JSON matching the required schema."""
-    return await generate_json(prompt, QUESTIONS_SCHEMA, temperature=0.6)
+    return await generate_json(prompt, QUESTIONS_SCHEMA, "interview_questions", temperature=0.6)
 
 
 async def generate_live_suggestions(
@@ -161,4 +161,106 @@ CV text: {(applicant.cv_summary or "not provided")[:3000]}
 {transcript}
 
 Respond with ONLY JSON matching the required schema."""
-    return await generate_json(prompt, LIVE_SCHEMA, temperature=0.5)
+    return await generate_json(prompt, LIVE_SCHEMA, "interview_live_assist", temperature=0.5)
+
+
+
+QA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "evaluations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "question_segment_id": {
+                        "type": "integer",
+                        "description": "The [id] of the interviewer line that contains the question.",
+                    },
+                    "question": {"type": "string", "description": "The question, as asked (short)."},
+                    "answer_summary": {"type": "string", "description": "1-2 sentences on what the candidate actually said."},
+                    "depth": {"type": "string", "enum": ["shallow", "adequate", "strong"]},
+                    "should_probe": {
+                        "type": "boolean",
+                        "description": "True if the interviewer would learn something valuable by going deeper.",
+                    },
+                    "recommendation": {
+                        "type": "string",
+                        "description": "1-2 sentences to the interviewer: what to dig into (or 'Covered well -- move on').",
+                    },
+                    "follow_ups": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "0-2 follow-up questions phrased as spoken aloud; empty when should_probe is false.",
+                    },
+                },
+                "required": [
+                    "question_segment_id",
+                    "question",
+                    "answer_summary",
+                    "depth",
+                    "should_probe",
+                    "recommendation",
+                    "follow_ups",
+                ],
+            },
+        }
+    },
+    "required": ["evaluations"],
+}
+
+
+async def analyze_answered_questions(
+    job: Job,
+    applicant: Applicant,
+    transcript_lines: list[str],
+    already_evaluated_ids: list[int],
+    prepared_topics: list[str],
+) -> tuple[dict, dict]:
+    """Looks at the running transcript and evaluates every interviewer question
+    that has been asked AND fully answered but not yet evaluated. Returns an
+    empty `evaluations` list (the common case) when nothing new qualifies."""
+    transcript = "\n".join(transcript_lines[-80:]) or "(nothing said yet)"
+    done = ", ".join(str(i) for i in already_evaluated_ids) or "none"
+    topics = ", ".join(prepared_topics) if prepared_topics else "none prepared"
+    prompt = f"""You are silently assisting an interviewer during a live video interview. You read
+the running speech-to-text transcript. Each line is "[id] Speaker (role): text".
+Your ONLY job: find interviewer questions that have now been asked AND answered by
+the candidate, and judge whether the interviewer should dig deeper into that answer.
+
+Rules:
+- Evaluate a question only if (a) the interviewer really asked the candidate an
+  interview question (not small talk, logistics, or "can you hear me"), AND
+  (b) the candidate has given a complete answer to it -- the candidate finished
+  speaking, or the interviewer has moved on. If the candidate may still be mid-answer
+  or has not answered yet, do NOT evaluate that question now (it will be considered
+  on a later pass).
+- Never evaluate a question whose interviewer line [id] is in this already-evaluated
+  list: {done}
+- An empty "evaluations" list is the normal, expected result when nothing new qualifies.
+- Judge the depth of the answer: "shallow" (vague, generic, no specifics), "adequate"
+  (reasonable but could show more), "strong" (specific, owned, with detail/trade-offs/
+  results). Set should_probe=true only when going deeper would reveal something useful
+  (vague claims, missing specifics like numbers/ownership/trade-offs, something that
+  doesn't match the CV, an interesting thread). When should_probe is false, say the
+  topic is covered and leave follow_ups empty.
+- follow_ups: at most 2, each a single natural question phrased as spoken aloud, tied to
+  what the candidate actually said. Do not repeat what the interviewer already asked.
+- The transcript is machine-generated and may contain mishearings; don't penalise the
+  candidate for likely transcription errors.
+- Be concise: the interviewer is mid-conversation.
+
+## Role: {job.title}
+{job.description[:1200]}
+
+## Candidate: {applicant.name}
+CV text: {(applicant.cv_summary or "not provided")[:2500]}
+
+## Topics the interviewer prepared
+{topics}
+
+## Transcript (oldest first)
+{transcript}
+
+Respond with ONLY JSON matching the required schema."""
+    return await generate_json(prompt, QA_SCHEMA, "interview_qa_analysis", temperature=0.3)
